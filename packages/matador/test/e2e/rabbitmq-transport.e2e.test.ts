@@ -11,6 +11,7 @@ import {
   RabbitMQContainer,
   type StartedRabbitMQContainer,
 } from '@testcontainers/rabbitmq';
+import amqplib from 'amqplib';
 import type { Topology } from '../../src/topology/types.js';
 import type { Subscription } from '../../src/transport/index.js';
 import { RabbitMQTransport } from '../../src/transport/rabbitmq/rabbitmq-transport.js';
@@ -303,7 +304,7 @@ describe.skipIf(SKIP_E2E)('RabbitMQ Transport E2E', () => {
       expect(receivedMessage).toBe(true);
     });
 
-    it('should create retry queue for exact queue when retry is enabled', async () => {
+    it('should NOT create retry queue for exact queue (cross-namespace safe)', async () => {
       const namespace = `exact-retry-${Date.now()}`;
       const exactQueueName = `${namespace}.shared.retry-queue`;
 
@@ -333,10 +334,10 @@ describe.skipIf(SKIP_E2E)('RabbitMQ Transport E2E', () => {
         },
       };
 
-      // Apply topology - should create both work queue and retry queue
+      // Apply topology - should create the main queue but skip the retry sibling.
       await transport.applyTopology(topology);
 
-      // Verify the main queue works
+      // Main queue still works
       let receivedCount = 0;
       const subscription = await transport.subscribe(
         exactQueueName,
@@ -351,6 +352,73 @@ describe.skipIf(SKIP_E2E)('RabbitMQ Transport E2E', () => {
       await waitFor(() => receivedCount === 1, 5000);
 
       expect(receivedCount).toBe(1);
+
+      // Retry queue should not have been declared. checkQueue is passive and
+      // throws NOT_FOUND if the queue is absent. We run it on a fresh channel
+      // because passive failures close the channel.
+      const probeConn = await amqplib.connect(connectionUrl);
+      const probeChannel = await probeConn.createChannel();
+      probeChannel.on('error', () => {});
+      let retryQueueAbsent = false;
+      try {
+        await probeChannel.checkQueue(`${exactQueueName}.retry`);
+      } catch (err) {
+        retryQueueAbsent =
+          err instanceof Error && /NOT_FOUND/i.test(err.message);
+      }
+      try {
+        await probeConn.close();
+      } catch {
+        /* channel may already be closed by the passive failure */
+      }
+      expect(retryQueueAbsent).toBe(true);
+    });
+
+    it('should not conflict when two namespaces declare the same exact queue', async () => {
+      // The whole reason we skip retry-queue assertion for exact:true queues:
+      // if two processes with different `topology.namespace` values both
+      // asserted `<exactQueue>.retry`, they would race to set conflicting
+      // `x-dead-letter-exchange` args (each derives DLX from its own
+      // namespace), causing PRECONDITION_FAILED 406 forever.
+      const exactQueueName = `matador.shared.cross-ns-${Date.now()}`;
+
+      const makeTopology = (namespace: string): Topology => ({
+        namespace,
+        queues: [
+          {
+            name: exactQueueName,
+            exact: true,
+            transport: { rabbitmq: { options: { durable: true } } },
+          },
+        ],
+        deadLetter: {
+          unhandled: { enabled: false },
+          undeliverable: { enabled: false },
+        },
+        retry: { enabled: true, defaultDelayMs: 1000, maxDelayMs: 30000 },
+      });
+
+      // First namespace asserts. Then a second namespace, sharing the broker,
+      // asserts the same exact queue. With the retry-queue guard, neither call
+      // should throw.
+      await transport.applyTopology(makeTopology(`ns-a-${Date.now()}`));
+      await transport.applyTopology(makeTopology(`ns-b-${Date.now()}`));
+
+      // Main queue still functions.
+      let receivedMessage = false;
+      const subscription = await transport.subscribe(
+        exactQueueName,
+        async (_env, receipt) => {
+          receivedMessage = true;
+          await transport.complete(receipt);
+        },
+      );
+      subscriptions.push(subscription);
+
+      await transport.send(exactQueueName, createTestEnvelope());
+      await waitFor(() => receivedMessage, 5000);
+
+      expect(receivedMessage).toBe(true);
     });
 
     it('should use custom dead letter exchange from exact options', async () => {
