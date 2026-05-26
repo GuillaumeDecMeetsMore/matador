@@ -659,8 +659,13 @@ export class RabbitMQTransport implements Transport {
       await channel.bindQueue(queueName, delayedExchange, queueName);
     }
 
-    // Create retry queue if retry is enabled
-    if (topology.retry.enabled) {
+    // Create retry queue if retry is enabled.
+    // Skip exact:true queues - they are owned by another team (cross-namespace).
+    // The retry queue derives its `x-dead-letter-exchange` from
+    // `${topology.namespace}.exchange`, which would conflict if multiple
+    // namespaces share the broker and the queue. This mirrors the existing
+    // `if (queueDef.exact) continue` guard in `assertDeadLetterQueues`.
+    if (topology.retry.enabled && !queueDef.exact) {
       await this.assertRetryQueue(channel, topology, queueName);
     }
   }
