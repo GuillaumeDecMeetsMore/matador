@@ -1,6 +1,6 @@
 {
   "name": "@zdavison/matador",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "A batteries-included event system.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -64,5 +64,8 @@
     "transport"
   ],
   "license": "MIT",
-  "files": ["dist", "cli.ts"]
+  "files": [
+    "dist",
+    "cli.ts"
+  ]
 }
