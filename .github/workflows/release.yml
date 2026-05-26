@@ -1,24 +1,79 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
+      packages: write
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - uses: softprops/action-gh-release@v1
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          generate_release_notes: true
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js (for npm OIDC publishing)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure npm for OIDC provenance publishing
+        run: npm config set provenance true
+
+      - name: Publish packages
+        run: bunx pubz --ci --version ${{ inputs.version }} --registry https://registry.npmjs.org
+
+      - name: Get published version
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./packages/matador/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Published version: $VERSION"
+
+      - name: Sync bun.lock with bumped workspace versions
+        run: |
+          bun install --lockfile-only
+          if ! git diff --quiet bun.lock; then
+            git add bun.lock
+            git commit -m "chore: sync bun.lock for v${{ steps.get-version.outputs.version }}"
+          fi
+
+      - name: Push changes
+        run: git push --follow-tags

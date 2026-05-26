@@ -11,8 +11,7 @@
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check . --fix",
     "typecheck": "bun run --filter '*' typecheck",
-    "clean": "bun run --filter '*' clean",
-    "publish": "./scripts/publish.sh"
+    "clean": "bun run --filter '*' clean"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
