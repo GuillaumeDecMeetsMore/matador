@@ -161,58 +161,11 @@ export class TopologyBuilder {
    * Validates the topology configuration.
    */
   validate(): readonly string[] {
-    const issues: string[] = [];
-
-    if (!this.namespace || this.namespace.trim() === '') {
-      issues.push('Namespace is required');
-    } else if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(this.namespace)) {
-      issues.push(
-        'Namespace must start with a letter and contain only alphanumeric characters, underscores, and hyphens',
-      );
-    }
-
-    if (this.queues.length === 0) {
-      issues.push('At least one queue is required');
-    }
-
-    const queueNames = new Set<string>();
-    for (const queue of this.queues) {
-      if (!queue.name || queue.name.trim() === '') {
-        issues.push('Queue name cannot be empty');
-      } else if (!queue.exact && !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(queue.name)) {
-        // Skip pattern validation for exact queues (allows names like 'matador.shared.id-platform')
-        issues.push(
-          `Queue name "${queue.name}" must start with a letter and contain only alphanumeric characters, underscores, and hyphens`,
-        );
-      } else if (queueNames.has(queue.name)) {
-        issues.push(`Duplicate queue name: "${queue.name}"`);
-      } else {
-        queueNames.add(queue.name);
-      }
-
-      if (queue.concurrency !== undefined && queue.concurrency < 1) {
-        issues.push(`Queue "${queue.name}" concurrency must be at least 1`);
-      }
-
-      if (queue.consumerTimeout !== undefined && queue.consumerTimeout < 0) {
-        issues.push(
-          `Queue "${queue.name}" consumer timeout must be non-negative`,
-        );
-      }
-    }
-
-    if (this.retry.enabled) {
-      if (this.retry.defaultDelayMs < 0) {
-        issues.push('Default retry delay must be non-negative');
-      }
-      if (this.retry.maxDelayMs < this.retry.defaultDelayMs) {
-        issues.push(
-          'Max retry delay must be greater than or equal to default delay',
-        );
-      }
-    }
-
-    return issues;
+    return [
+      ...validateNamespace(this.namespace),
+      ...validateQueues(this.queues),
+      ...validateRetry(this.retry),
+    ];
   }
 
   /**
@@ -235,4 +188,75 @@ export class TopologyBuilder {
       retry: this.retry,
     };
   }
+}
+
+const IDENTIFIER_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+
+function validateNamespace(namespace: string): string[] {
+  if (!namespace || namespace.trim() === '') {
+    return ['Namespace is required'];
+  }
+  if (!IDENTIFIER_PATTERN.test(namespace)) {
+    return [
+      'Namespace must start with a letter and contain only alphanumeric characters, underscores, and hyphens',
+    ];
+  }
+  return [];
+}
+
+function validateQueueName(
+  queue: QueueDefinition,
+  seen: Set<string>,
+): string[] {
+  if (!queue.name || queue.name.trim() === '') {
+    return ['Queue name cannot be empty'];
+  }
+  if (!queue.exact && !IDENTIFIER_PATTERN.test(queue.name)) {
+    return [
+      `Queue name "${queue.name}" must start with a letter and contain only alphanumeric characters, underscores, and hyphens`,
+    ];
+  }
+  if (seen.has(queue.name)) {
+    return [`Duplicate queue name: "${queue.name}"`];
+  }
+  seen.add(queue.name);
+  return [];
+}
+
+function validateQueueLimits(queue: QueueDefinition): string[] {
+  const issues: string[] = [];
+  if (queue.concurrency !== undefined && queue.concurrency < 1) {
+    issues.push(`Queue "${queue.name}" concurrency must be at least 1`);
+  }
+  if (queue.consumerTimeout !== undefined && queue.consumerTimeout < 0) {
+    issues.push(`Queue "${queue.name}" consumer timeout must be non-negative`);
+  }
+  return issues;
+}
+
+function validateQueues(queues: readonly QueueDefinition[]): string[] {
+  const issues: string[] = [];
+  if (queues.length === 0) {
+    issues.push('At least one queue is required');
+  }
+  const seen = new Set<string>();
+  for (const queue of queues) {
+    issues.push(...validateQueueName(queue, seen));
+    issues.push(...validateQueueLimits(queue));
+  }
+  return issues;
+}
+
+function validateRetry(retry: RetryConfig): string[] {
+  if (!retry.enabled) return [];
+  const issues: string[] = [];
+  if (retry.defaultDelayMs < 0) {
+    issues.push('Default retry delay must be non-negative');
+  }
+  if (retry.maxDelayMs < retry.defaultDelayMs) {
+    issues.push(
+      'Max retry delay must be greater than or equal to default delay',
+    );
+  }
+  return issues;
 }

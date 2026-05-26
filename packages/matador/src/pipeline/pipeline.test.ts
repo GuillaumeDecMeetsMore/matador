@@ -852,7 +852,9 @@ describe('ProcessingPipeline', () => {
       await pipeline.process(new Uint8Array(), receipt);
 
       const calls = sendMock.mock.calls as unknown as Array<[string, Envelope]>;
-      const sentEnvelope = calls[0]![1];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected sendMock to be called');
+      const sentEnvelope = firstCall[1];
       expect(sentEnvelope.docket.lastError).toBe('Test error message');
       expect(sentEnvelope.docket.firstError).toBe('Test error message');
     });
@@ -996,7 +998,9 @@ describe('ProcessingPipeline', () => {
       const calls = sendToDeadLetterMock.mock.calls as unknown as Array<
         [MessageReceipt, string, Envelope, string]
       >;
-      const sentEnvelope = calls[0]![2];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected sendToDeadLetter to be called');
+      const sentEnvelope = firstCall[2];
       expect(sentEnvelope.docket.originalQueue).toBe('original-queue');
     });
 
@@ -1178,7 +1182,9 @@ describe('ProcessingPipeline', () => {
       await pipeline.process(new Uint8Array(), receipt);
 
       const calls = sendMock.mock.calls as unknown as Array<[string, Envelope]>;
-      const sentEnvelope = calls[0]![1];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected sendMock to be called');
+      const sentEnvelope = firstCall[1];
       expect(sentEnvelope.docket.firstError).toBe('First failure');
       expect(sentEnvelope.docket.lastError).toBe('First failure');
     });
@@ -1223,7 +1229,9 @@ describe('ProcessingPipeline', () => {
       await pipeline.process(new Uint8Array(), receipt);
 
       const calls = sendMock.mock.calls as unknown as Array<[string, Envelope]>;
-      const sentEnvelope = calls[0]![1];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected sendMock to be called');
+      const sentEnvelope = firstCall[1];
       expect(sentEnvelope.docket.firstError).toBe('Original error');
       expect(sentEnvelope.docket.lastError).toBe('Second failure');
     });

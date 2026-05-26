@@ -601,6 +601,38 @@ export class RabbitMQTransport implements Transport {
     });
   }
 
+  private buildWorkQueueOptions(
+    topology: Topology,
+    queueDef: QueueDefinition,
+  ): Options.AssertQueue {
+    const queueOptions: Options.AssertQueue = {
+      durable: true,
+      arguments: {} as Record<string, unknown>,
+    };
+
+    if (this.config.quorumQueues && !queueDef.exact) {
+      queueOptions.arguments['x-queue-type'] = 'quorum';
+    }
+
+    if (
+      topology.deadLetter.unhandled.enabled ||
+      topology.deadLetter.undeliverable.enabled
+    ) {
+      queueOptions.arguments['x-dead-letter-exchange'] =
+        this.getDLXExchangeName(topology.namespace);
+    }
+
+    if (queueDef.priorities) {
+      queueOptions.arguments['x-max-priority'] = 10;
+    }
+
+    if (queueDef.consumerTimeout) {
+      queueOptions.arguments['x-consumer-timeout'] = queueDef.consumerTimeout;
+    }
+
+    return queueOptions;
+  }
+
   private async assertWorkQueue(
     channel: Channel,
     topology: Topology,
@@ -611,43 +643,9 @@ export class RabbitMQTransport implements Transport {
       : `${topology.namespace}.${queueDef.name}`;
 
     const rabbitmqOptions = queueDef.transport?.rabbitmq?.options;
-
-    // If user provided exact RabbitMQ options, use them directly (replaces all defaults)
-    if (rabbitmqOptions) {
-      await channel.assertQueue(queueName, rabbitmqOptions);
-    } else {
-      // Use computed defaults
-      const queueOptions: Options.AssertQueue = {
-        durable: true,
-        arguments: {} as Record<string, unknown>,
-      };
-
-      // Use quorum queues for durability
-      if (this.config.quorumQueues && !queueDef.exact) {
-        queueOptions.arguments['x-queue-type'] = 'quorum';
-      }
-
-      // Set up dead-letter exchange routing
-      const dlxExchange = this.getDLXExchangeName(topology.namespace);
-      if (
-        topology.deadLetter.unhandled.enabled ||
-        topology.deadLetter.undeliverable.enabled
-      ) {
-        queueOptions.arguments['x-dead-letter-exchange'] = dlxExchange;
-      }
-
-      // Enable priority if requested
-      if (queueDef.priorities) {
-        queueOptions.arguments['x-max-priority'] = 10;
-      }
-
-      // Set consumer timeout if specified
-      if (queueDef.consumerTimeout) {
-        queueOptions.arguments['x-consumer-timeout'] = queueDef.consumerTimeout;
-      }
-
-      await channel.assertQueue(queueName, queueOptions);
-    }
+    const queueOptions =
+      rabbitmqOptions ?? this.buildWorkQueueOptions(topology, queueDef);
+    await channel.assertQueue(queueName, queueOptions);
 
     // Bind queue to main exchange
     const mainExchange = this.getMainExchangeName(topology.namespace);

@@ -89,7 +89,8 @@ describe('installPlugins', () => {
 
     // Check user.created has both subscribers
     const userEntry = schema[UserCreatedEvent.key];
-    expect(isSchemaEntryTuple(userEntry!)).toBe(true);
+    if (!userEntry) throw new Error('expected user.created entry');
+    expect(isSchemaEntryTuple(userEntry)).toBe(true);
     const [, userSubs] = userEntry as [unknown, readonly unknown[]];
     expect(userSubs).toHaveLength(2);
     expect(userSubs[0]).toBe(sub1);
@@ -211,7 +212,8 @@ describe('installPlugins', () => {
     const schema = installPlugins(baseSchema, [{ subscriber: globalSub }]);
 
     const entry = schema[UserCreatedEvent.key];
-    expect(isSchemaEntryTuple(entry!)).toBe(true);
+    if (!entry) throw new Error('expected user.created entry');
+    expect(isSchemaEntryTuple(entry)).toBe(true);
     const [eventClass, subs] = entry as [unknown, readonly unknown[]];
     expect(eventClass).toBe(UserCreatedEvent);
     expect(subs).toHaveLength(2);

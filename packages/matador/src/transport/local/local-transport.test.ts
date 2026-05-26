@@ -75,9 +75,9 @@ describe('LocalTransport', () => {
       await transport.send('test-queue', envelope);
 
       const received = await transport.receiveOne('test-queue');
-      expect(received).not.toBeNull();
+      if (!received) throw new Error('expected received message');
 
-      await transport.complete(received!.receipt);
+      await transport.complete(received.receipt);
 
       expect(transport.getQueueSize('test-queue')).toBe(0);
       expect(transport.getCompleted()).toHaveLength(1);
@@ -156,10 +156,10 @@ describe('LocalTransport', () => {
       await transport.send('test-queue', envelope);
 
       const received = await transport.receiveOne('test-queue');
-      expect(received).not.toBeNull();
+      if (!received) throw new Error('expected received message');
 
       await transport.sendToDeadLetter(
-        received!.receipt,
+        received.receipt,
         'dlq',
         envelope,
         'test error',
@@ -201,7 +201,8 @@ describe('LocalTransport', () => {
       await transport.send('test-queue', createTestEnvelope());
 
       const received = await transport.receiveOne('test-queue');
-      await transport.complete(received!.receipt);
+      if (!received) throw new Error('expected received message');
+      await transport.complete(received.receipt);
 
       transport.clear();
 

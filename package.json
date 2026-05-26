@@ -1,10 +1,7 @@
 {
   "name": "matador-monorepo",
   "private": false,
-  "workspaces": [
-    "packages/*",
-    "examples/*"
-  ],
+  "workspaces": ["packages/*", "examples/*"],
   "scripts": {
     "build": "bun run --filter '@zdavison/matador' build && bun run --filter '@zdavison/matador-nest' build && bun run --filter 'matador-nest-example' build",
     "test": "bun run --filter '*' test",

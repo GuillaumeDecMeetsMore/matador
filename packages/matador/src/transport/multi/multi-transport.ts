@@ -179,7 +179,8 @@ export class MultiTransport implements Transport {
     const errors: Error[] = [];
 
     for (let i = 0; i < transportOrder.length; i++) {
-      const transport = transportOrder[i]!;
+      const transport = transportOrder[i];
+      if (!transport) continue;
       try {
         return await transport.send(queue, envelope, options);
       } catch (error) {

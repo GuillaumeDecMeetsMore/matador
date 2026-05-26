@@ -378,6 +378,53 @@ const V1_MESSAGE_FIXTURES: V1MessageFixture[] = [
   // },
 ];
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
+
+function assertV1Id(envelope: { id: string }, expectedId: string | undefined) {
+  if (expectedId !== undefined) {
+    expect(envelope.id).toBe(expectedId);
+  } else {
+    expect(envelope.id).toMatch(UUID_PATTERN);
+  }
+}
+
+function assertV1Metadata(
+  metadata: Record<string, unknown> | undefined,
+  expected: Record<string, unknown> | undefined,
+) {
+  if (expected !== undefined) {
+    expect(metadata).toEqual(expected);
+  } else {
+    expect(metadata === undefined || Object.keys(metadata).length === 0).toBe(
+      true,
+    );
+  }
+}
+
+function assertV1Translation(
+  envelope: ReturnType<RabbitMQCodec['decode']>,
+  expected: V1MessageFixture['expected'],
+): void {
+  expect(envelope.docket.eventKey).toBe(expected.eventKey);
+  expect(envelope.docket.targetSubscriber).toBe(expected.targetSubscriber);
+  expect(envelope.data).toEqual(expected.data);
+
+  assertV1Id(envelope, expected.id);
+  assertV1Metadata(envelope.docket.metadata, expected.metadata);
+
+  if (expected.correlationId !== undefined) {
+    expect(envelope.docket.correlationId).toBe(expected.correlationId);
+  }
+
+  expect(envelope.docket.attempts).toBe(expected.attempts ?? 1);
+  expect(envelope.docket.importance).toBe(
+    expected.importance ?? 'should-investigate',
+  );
+  expect(envelope.docket.createdAt).toMatch(ISO_DATE_PATTERN);
+}
+
 describe('RabbitMQCodec', () => {
   const codec = new RabbitMQCodec();
 
@@ -388,58 +435,7 @@ describe('RabbitMQCodec', () => {
         const headers = fixture.headers ?? {};
 
         const envelope = codec.decode(body, headers);
-
-        // Check required fields
-        expect(envelope.docket.eventKey).toBe(fixture.expected.eventKey);
-        expect(envelope.docket.targetSubscriber).toBe(
-          fixture.expected.targetSubscriber,
-        );
-        expect(envelope.data).toEqual(fixture.expected.data);
-
-        // Check optional ID (may be generated if not specified)
-        if (fixture.expected.id !== undefined) {
-          expect(envelope.id).toBe(fixture.expected.id);
-        } else {
-          expect(envelope.id).toMatch(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-          );
-        }
-
-        // Check metadata
-        if (fixture.expected.metadata !== undefined) {
-          expect(envelope.docket.metadata).toEqual(fixture.expected.metadata);
-        } else {
-          expect(
-            envelope.docket.metadata === undefined ||
-              Object.keys(envelope.docket.metadata).length === 0,
-          ).toBe(true);
-        }
-
-        // Check correlation ID
-        if (fixture.expected.correlationId !== undefined) {
-          expect(envelope.docket.correlationId).toBe(
-            fixture.expected.correlationId,
-          );
-        }
-
-        // Check attempts (defaults to 1)
-        if (fixture.expected.attempts !== undefined) {
-          expect(envelope.docket.attempts).toBe(fixture.expected.attempts);
-        } else {
-          expect(envelope.docket.attempts).toBe(1);
-        }
-
-        // Check importance (defaults to 'should-investigate')
-        if (fixture.expected.importance !== undefined) {
-          expect(envelope.docket.importance).toBe(fixture.expected.importance);
-        } else {
-          expect(envelope.docket.importance).toBe('should-investigate');
-        }
-
-        // Check createdAt is a valid ISO string
-        expect(envelope.docket.createdAt).toMatch(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/,
-        );
+        assertV1Translation(envelope, fixture.expected);
       });
     }
   });
@@ -458,9 +454,10 @@ describe('RabbitMQCodec', () => {
       const envelope = codec.decode(encoded, {});
       const after = Date.now();
 
-      expect(envelope.docket.scheduledFor).toBeDefined();
+      const { scheduledFor } = envelope.docket;
+      if (!scheduledFor) throw new Error('expected scheduledFor to be set');
 
-      const scheduledTime = new Date(envelope.docket.scheduledFor!).getTime();
+      const scheduledTime = new Date(scheduledFor).getTime();
       expect(scheduledTime).toBeGreaterThanOrEqual(before + 5000);
       expect(scheduledTime).toBeLessThanOrEqual(after + 5000);
     });

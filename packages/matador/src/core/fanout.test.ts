@@ -195,7 +195,8 @@ describe('FanoutEngine', () => {
       await fanout.send(UserCreatedEvent, event);
 
       const sendCall = (transport.send as ReturnType<typeof mock>).mock
-        .calls[0]!;
+        .calls[0];
+      if (!sendCall) throw new Error('expected transport.send to be called');
       const envelope = sendCall[1] as Envelope;
 
       expect(envelope.docket.eventKey).toBe('user.created');
@@ -228,7 +229,8 @@ describe('FanoutEngine', () => {
       await fanout.send(OrderPlacedEvent, event);
 
       const sendCall = (transport.send as ReturnType<typeof mock>).mock
-        .calls[0]!;
+        .calls[0];
+      if (!sendCall) throw new Error('expected transport.send to be called');
       const envelope = sendCall[1] as Envelope;
 
       expect(envelope.docket.eventKey).toBe('order.placed');
@@ -1048,7 +1050,9 @@ describe('FanoutEngine', () => {
       const calls = onEnqueueSuccess.mock.calls as unknown as Array<
         [{ envelope: Envelope; queue: string }]
       >;
-      const callArgs = calls[0]![0];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected onEnqueueSuccess to be called');
+      const callArgs = firstCall[0];
       expect(callArgs.envelope.docket.eventKey).toBe('user.created');
       expect(callArgs.envelope.docket.targetSubscriber).toBe('handle-user');
     });
@@ -1100,7 +1104,9 @@ describe('FanoutEngine', () => {
       const calls = onEnqueueError.mock.calls as unknown as Array<
         [{ envelope: Envelope; error: TransportSendError }]
       >;
-      const callArgs = calls[0]![0];
+      const firstCall = calls[0];
+      if (!firstCall) throw new Error('expected onEnqueueError to be called');
+      const callArgs = firstCall[0];
       expect(callArgs.envelope.docket.eventKey).toBe('user.created');
       expect(callArgs.error).toBeInstanceOf(TransportSendError);
     });

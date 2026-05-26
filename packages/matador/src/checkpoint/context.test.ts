@@ -148,11 +148,13 @@ describe('ResumableContext', () => {
 
       await context.io('step-1', () => 'result-1');
       let checkpoint = await store.get(envelope.id);
-      expect(Object.keys(checkpoint!.completedSteps)).toHaveLength(1);
+      if (!checkpoint) throw new Error('expected checkpoint after step-1');
+      expect(Object.keys(checkpoint.completedSteps)).toHaveLength(1);
 
       await context.io('step-2', () => 'result-2');
       checkpoint = await store.get(envelope.id);
-      expect(Object.keys(checkpoint!.completedSteps)).toHaveLength(2);
+      if (!checkpoint) throw new Error('expected checkpoint after step-2');
+      expect(Object.keys(checkpoint.completedSteps)).toHaveLength(2);
     });
 
     it('should support various JSON-serializable return types', async () => {

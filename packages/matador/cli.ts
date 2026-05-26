@@ -252,26 +252,75 @@ async function runSendTestEvent(
   await dispatchEvent(config, config.testEvent, options);
 }
 
-async function dispatchEvent(
-  config: ConfigExport,
-  eventSpec: EventExport,
-  options: { dryRun: boolean; timeout: number; verbose: boolean },
-): Promise<void> {
-  // Validate event exists in config
-  const schemaEntry = config.schema[eventSpec.eventKey];
+function resolveSchemaEntry(config: ConfigExport, eventKey: string) {
+  const schemaEntry = config.schema[eventKey];
   if (!schemaEntry) {
-    logError(`Event "${eventSpec.eventKey}" not found in config`);
+    logError(`Event "${eventKey}" not found in config`);
     logInfo(`Available events: ${Object.keys(config.schema).join(', ')}`);
     process.exit(1);
   }
-
-  // Extract EventClass and subscribers from schema entry
   const EventClass = isSchemaEntryTuple(schemaEntry)
     ? schemaEntry[0]
     : schemaEntry.eventClass;
   const subscribers = isSchemaEntryTuple(schemaEntry)
     ? schemaEntry[1]
     : schemaEntry.subscribers;
+  return { EventClass, subscribers };
+}
+
+function logEventDetails(eventSpec: EventExport): void {
+  logInfo(`Data: ${JSON.stringify(eventSpec.data, null, 2)}`);
+  if (eventSpec.before) {
+    logInfo(`Before: ${JSON.stringify(eventSpec.before, null, 2)}`);
+  }
+  if (eventSpec.options) {
+    logInfo(`Options: ${JSON.stringify(eventSpec.options, null, 2)}`);
+  }
+}
+
+function logSendResult(result: {
+  eventKey: string;
+  subscribersSent: number;
+  subscribersSkipped: number;
+  errors: ReadonlyArray<{ subscriberName: string; error: Error }>;
+}): void {
+  logSection('Send Result');
+  logInfo(`Event key: ${result.eventKey}`);
+  logInfo(`Subscribers sent: ${result.subscribersSent}`);
+  logInfo(`Subscribers skipped: ${result.subscribersSkipped}`);
+
+  if (result.errors.length > 0) {
+    logWarning(`Dispatch errors: ${result.errors.length}`);
+    for (const err of result.errors) {
+      logError(`  [${err.subscriberName}] ${err.error.message}`);
+    }
+  }
+}
+
+function buildCliHooks(config: ConfigExport, verbose: boolean): MatadorHooks {
+  return {
+    logger: verbose ? consoleLogger : undefined,
+    onWorkerSuccess: (ctx) => {
+      logSuccess(`[${ctx.subscriber.name}] processed in ${ctx.durationMs}ms`);
+    },
+    onWorkerError: (ctx) => {
+      logError(
+        `[${ctx.subscriber.name}] failed after ${ctx.durationMs}ms: ${ctx.error.message}`,
+      );
+    },
+    ...config.hooks,
+  };
+}
+
+async function dispatchEvent(
+  config: ConfigExport,
+  eventSpec: EventExport,
+  options: { dryRun: boolean; timeout: number; verbose: boolean },
+): Promise<void> {
+  const { EventClass, subscribers } = resolveSchemaEntry(
+    config,
+    eventSpec.eventKey,
+  );
 
   if (!subscribers || subscribers.length === 0) {
     logWarning(`No subscribers registered for event "${eventSpec.eventKey}"`);
@@ -288,7 +337,6 @@ async function dispatchEvent(
 
   logSection('Dispatching Event');
 
-  // Create topology
   const topology =
     config.topology ??
     TopologyBuilder.create()
@@ -297,24 +345,9 @@ async function dispatchEvent(
       .withoutDeadLetter()
       .build();
 
-  // Create transport
   const transport = new LocalTransport();
+  const hooks = buildCliHooks(config, options.verbose);
 
-  // Create hooks for logging
-  const hooks: MatadorHooks = {
-    logger: options.verbose ? consoleLogger : undefined,
-    onWorkerSuccess: (ctx) => {
-      logSuccess(`[${ctx.subscriber.name}] processed in ${ctx.durationMs}ms`);
-    },
-    onWorkerError: (ctx) => {
-      logError(
-        `[${ctx.subscriber.name}] failed after ${ctx.durationMs}ms: ${ctx.error.message}`,
-      );
-    },
-    ...config.hooks,
-  };
-
-  // Create Matador instance with schema and hooks
   const matador = new Matador(
     {
       transport,
@@ -329,35 +362,16 @@ async function dispatchEvent(
     await matador.start();
     logSuccess('[Matador] Started.');
 
-    // Create and dispatch the event
     const event = new EventClass(eventSpec.data, eventSpec.before);
     logInfo(`Dispatching: ${eventSpec.eventKey}`);
 
     if (options.verbose) {
-      logInfo(`Data: ${JSON.stringify(eventSpec.data, null, 2)}`);
-      if (eventSpec.before) {
-        logInfo(`Before: ${JSON.stringify(eventSpec.before, null, 2)}`);
-      }
-      if (eventSpec.options) {
-        logInfo(`Options: ${JSON.stringify(eventSpec.options, null, 2)}`);
-      }
+      logEventDetails(eventSpec);
     }
 
     const result = await matador.send(event, eventSpec.options);
+    logSendResult(result);
 
-    logSection('Send Result');
-    logInfo(`Event key: ${result.eventKey}`);
-    logInfo(`Subscribers sent: ${result.subscribersSent}`);
-    logInfo(`Subscribers skipped: ${result.subscribersSkipped}`);
-
-    if (result.errors.length > 0) {
-      logWarning(`Dispatch errors: ${result.errors.length}`);
-      for (const err of result.errors) {
-        logError(`  [${err.subscriberName}] ${err.error.message}`);
-      }
-    }
-
-    // Wait for processing
     logSection('Processing');
     const idle = await matador.waitForIdle(options.timeout);
 
@@ -413,8 +427,8 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    const [configPath, eventPath] = positionals;
-    await runSend(configPath!, eventPath!, {
+    const [configPath, eventPath] = positionals as [string, string];
+    await runSend(configPath, eventPath, {
       dryRun: values['dry-run'] ?? false,
       timeout: Number.parseInt(values.timeout ?? '5000', 10),
       verbose: values.verbose ?? false,
@@ -436,8 +450,8 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    const [configPath] = positionals;
-    await runSendTestEvent(configPath!, {
+    const [configPath] = positionals as [string];
+    await runSendTestEvent(configPath, {
       dryRun: values['dry-run'] ?? false,
       timeout: Number.parseInt(values.timeout ?? '5000', 10),
       verbose: values.verbose ?? false,

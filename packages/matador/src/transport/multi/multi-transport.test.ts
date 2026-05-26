@@ -160,7 +160,8 @@ describe('MultiTransport', () => {
       await transportWithCallback.send('test-queue', envelope);
 
       expect(fallbackContexts).toHaveLength(1);
-      const ctx = fallbackContexts[0]!;
+      const ctx = fallbackContexts[0];
+      if (!ctx) throw new Error('expected fallback context');
       expect(ctx.failedTransport).toBe('local');
       expect(ctx.nextTransport).toBe('local');
       expect(ctx.queue).toBe('test-queue');
@@ -277,9 +278,9 @@ describe('MultiTransport', () => {
       await primary.send('test-queue', createTestEnvelope());
 
       const received = await primary.receiveOne('test-queue');
-      expect(received).not.toBeNull();
+      if (!received) throw new Error('expected received message');
 
-      await transport.complete(received!.receipt);
+      await transport.complete(received.receipt);
 
       expect(primary.getCompleted()).toHaveLength(1);
     });
@@ -295,10 +296,10 @@ describe('MultiTransport', () => {
       await primary.send('test-queue', envelope);
 
       const received = await primary.receiveOne('test-queue');
-      expect(received).not.toBeNull();
+      if (!received) throw new Error('expected received message');
 
       await transport.sendToDeadLetter(
-        received!.receipt,
+        received.receipt,
         'dlq',
         envelope,
         'test error',
