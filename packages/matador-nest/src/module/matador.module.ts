@@ -5,7 +5,7 @@ import {
   Module,
   type Provider,
 } from '@nestjs/common';
-import { DiscoveryModule, DiscoveryService } from '@nestjs/core';
+import { DiscoveryModule } from '@nestjs/core';
 import { MATADOR_OPTIONS } from '../constants.js';
 import { SubscriberDiscoveryService } from '../discovery/subscriber-discovery.service.js';
 import { MatadorService } from '../services/matador.service.js';
@@ -85,7 +85,6 @@ export class MatadorModule {
           provide: MATADOR_OPTIONS,
           useValue: options,
         },
-        DiscoveryService,
         SubscriberDiscoveryService,
         MatadorService,
       ],
@@ -108,7 +107,6 @@ export class MatadorModule {
       imports: [DiscoveryModule, ...(options.imports ?? [])],
       providers: [
         ...asyncProviders,
-        DiscoveryService,
         SubscriberDiscoveryService,
         MatadorService,
       ],
