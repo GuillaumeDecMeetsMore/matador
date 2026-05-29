@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { TransportSendError } from '../errors/index.js';
+import { PartialSendError, TransportSendError } from '../errors/index.js';
 import type { MatadorSchema } from '../schema/index.js';
 import { TopologyBuilder } from '../topology/builder.js';
 import { LocalTransport } from '../transport/local/local-transport.js';
@@ -381,7 +381,7 @@ describe('Matador', () => {
       expect(result.subscribersSent).toBe(1);
     });
 
-    it('should surface transport send failures in result.errors', async () => {
+    it('should throw PartialSendError when transport send fails', async () => {
       const topology = TopologyBuilder.create()
         .withNamespace('test')
         .addQueue('events')
@@ -406,19 +406,17 @@ describe('Matador', () => {
         throw sendError;
       });
 
-      const result = await matador.send(
-        new UserCreatedEvent({
-          userId: '123',
-          email: 'test@example.com',
-        }),
-      );
+      const thrown = await matador
+        .send(new UserCreatedEvent({ userId: '123', email: 'test@example.com' }))
+        .catch((e) => e);
 
-      expect(result.subscribersSent).toBe(0);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]?.subscriberName).toBe('handle-user');
-      expect(result.errors[0]?.queue).toBe('test.events');
-      expect(result.errors[0]?.error).toBeInstanceOf(TransportSendError);
-      expect(result.errors[0]?.error.cause).toBe(sendError);
+      expect(thrown).toBeInstanceOf(PartialSendError);
+      expect(thrown.eventKey).toBe(UserCreatedEvent.key);
+      expect(thrown.errors).toHaveLength(1);
+      expect(thrown.errors[0]?.subscriberName).toBe('handle-user');
+      expect(thrown.errors[0]?.queue).toBe('test.events');
+      expect(thrown.errors[0]?.error).toBeInstanceOf(TransportSendError);
+      expect(thrown.errors[0]?.error.cause).toBe(sendError);
     });
   });
 
