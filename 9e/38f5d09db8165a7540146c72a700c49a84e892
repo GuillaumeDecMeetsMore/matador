@@ -1,0 +1,36 @@
+packages/matador/src/core/matador.ts
+  h_f948a6a5342a21 7,295,304
+packages/matador/src/errors/index.ts
+  h_f948a6a5342a21 28
+packages/matador/src/index.ts
+  h_f948a6a5342a21 195
+README.md
+  s_f708bfefa1e856::t_426a942ab8a5db 732-733
+packages/matador/src/errors/matador-errors.ts
+  s_f708bfefa1e856::t_7ed7f3bc19361b 178,183-184
+  h_f948a6a5342a21 180
+  s_f708bfefa1e856::t_753ec222c2ca4b 188-192
+packages/matador/src/core/matador.test.ts
+  h_f948a6a5342a21 2,384,411,415
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9e38f5d09db8165a7540146c72a700c49a84e892",
+  "prompts": {},
+  "humans": {
+    "h_f948a6a5342a21": {
+      "author": "Guillaume Deconinck <deconinck.guillaume@meetsmore.com>"
+    }
+  },
+  "sessions": {
+    "s_f708bfefa1e856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fc2b618a-7f4e-44a1-a9ee-63ba8b5acb60",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Guillaume Deconinck <deconinck.guillaume@meetsmore.com>"
+    }
+  }
+}
