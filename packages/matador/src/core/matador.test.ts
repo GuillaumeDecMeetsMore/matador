@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { TransportSendError } from '../errors/index.js';
 import type { MatadorSchema } from '../schema/index.js';
 import { TopologyBuilder } from '../topology/builder.js';
 import { LocalTransport } from '../transport/local/local-transport.js';
@@ -378,6 +379,46 @@ describe('Matador', () => {
       });
 
       expect(result.subscribersSent).toBe(1);
+    });
+
+    it('should surface transport send failures in result.errors', async () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('test')
+        .addQueue('events')
+        .build();
+
+      const subscriber = createSubscriber({
+        name: 'handle-user',
+        description: 'Handles user events',
+        callback: async () => {},
+      });
+
+      const schema: MatadorSchema = {
+        [UserCreatedEvent.key]: [UserCreatedEvent, [subscriber]],
+      };
+
+      matador = new Matador({ transport, topology, schema });
+
+      await matador.start();
+
+      const sendError = new Error('Network timeout');
+      transport.send = mock(async () => {
+        throw sendError;
+      });
+
+      const result = await matador.send(
+        new UserCreatedEvent({
+          userId: '123',
+          email: 'test@example.com',
+        }),
+      );
+
+      expect(result.subscribersSent).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]?.subscriberName).toBe('handle-user');
+      expect(result.errors[0]?.queue).toBe('test.events');
+      expect(result.errors[0]?.error).toBeInstanceOf(TransportSendError);
+      expect(result.errors[0]?.error.cause).toBe(sendError);
     });
   });
 
