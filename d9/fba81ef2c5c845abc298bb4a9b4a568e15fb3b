@@ -1,0 +1,31 @@
+packages/matador/src/core/matador.ts
+  s_6a31a8bd35e28e::t_64c6d8a6dac89b 7
+  s_6a31a8bd35e28e::t_c919ed571976aa 293-295,301-303
+README.md
+  s_6a31a8bd35e28e::t_c2745343edf1ec 732-733
+packages/matador/src/core/matador.test.ts
+  s_6a31a8bd35e28e::t_774290f8045cd3 384,409-419
+  s_6a31a8bd35e28e::t_b53e5bd128e1cc 2
+packages/matador/src/errors/matador-errors.ts
+  s_6a31a8bd35e28e::t_07b64123c9ef2b 177-210
+packages/matador/src/errors/index.ts
+  s_6a31a8bd35e28e::t_3e0c9c37f8ca7d 28
+packages/matador/src/index.ts
+  s_6a31a8bd35e28e::t_d2524a567d86cf 195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d9fba81ef2c5c845abc298bb4a9b4a568e15fb3b",
+  "prompts": {},
+  "sessions": {
+    "s_6a31a8bd35e28e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c083a242-6245-4201-8ace-660064674523",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Guillaume Deconinck <deconinck.guillaume@meetsmore.com>"
+    }
+  }
+}
