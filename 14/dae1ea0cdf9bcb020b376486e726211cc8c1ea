@@ -1,0 +1,27 @@
+packages/matador/src/core/matador.ts
+  s_3884d6fd431eeb::t_71e23df3027747 292,298
+packages/matador/src/core/matador.test.ts
+  s_3884d6fd431eeb::t_b988ddf102cc98 383-422
+  s_3884d6fd431eeb::t_453a91af97a4ee 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "14dae1ea0cdf9bcb020b376486e726211cc8c1ea",
+  "prompts": {},
+  "humans": {
+    "h_f948a6a5342a21": {
+      "author": "Guillaume Deconinck <deconinck.guillaume@meetsmore.com>"
+    }
+  },
+  "sessions": {
+    "s_3884d6fd431eeb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c858ae09-0b69-41fd-aef4-f45d91cc847f",
+        "model": "default"
+      },
+      "human_author": "Guillaume Deconinck <deconinck.guillaume@meetsmore.com>"
+    }
+  }
+}
