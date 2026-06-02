@@ -4,6 +4,7 @@ import { JsonCodec } from '../codec/index.js';
 import {
   InvalidSchemaError,
   NotStartedError,
+  SomeSendError,
   ShutdownInProgressError,
 } from '../errors/index.js';
 import type { MatadorHooks } from '../hooks/index.js';
@@ -289,13 +290,19 @@ export class Matador implements Dispatcher {
       const data = dataOrOptions as T;
       const options = maybeOptions;
       const event = new eventClass(data);
-      return this.fanout.send(eventClass, event, options);
+      const result = await this.fanout.send(eventClass, event, options);
+      if (result.errors.length > 0)
+        throw new SomeSendError(result.eventKey, result.errors);
+      return result;
     }
     // Called as: send(event, options?)
     const event = eventOrClass as Event<T>;
     const options = dataOrOptions as EventOptions | undefined;
     const eventClass = event.constructor as EventClass<T>;
-    return this.fanout.send(eventClass, event, options);
+    const result = await this.fanout.send(eventClass, event, options);
+    if (result.errors.length > 0)
+      throw new SomeSendError(result.eventKey, result.errors);
+    return result;
   }
 
   /**

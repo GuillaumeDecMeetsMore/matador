@@ -192,6 +192,7 @@ export {
   isTransportNotConnectedError,
   TransportClosedError,
   TransportSendError,
+  SomeSendError,
   AllTransportsFailedError,
   DelayedMessagesNotSupportedError,
   // Schema & configuration errors

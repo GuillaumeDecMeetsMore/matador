@@ -174,6 +174,31 @@ export class TransportSendError extends MatadorError {
 }
 
 /**
+ * Thrown when send() completes but one or more subscriber publishes failed.
+ * The `errors` array contains per-failure details: subscriber name, target queue, and underlying error.
+ */
+export class SomeSendError extends MatadorError {
+  readonly description =
+    'One or more subscriber messages could not be published during send(). ' +
+    'ACTION: Inspect the `errors` array for per-failure details. ' +
+    'Each entry contains the subscriber name, target queue, and underlying error.';
+
+  constructor(
+    public readonly eventKey: string,
+    public readonly errors: ReadonlyArray<{
+      subscriberName: string;
+      queue: string;
+      error: Error;
+    }>,
+  ) {
+    const summary = errors
+      .map((e) => `${e.subscriberName} (${e.queue}): ${e.error.message}`)
+      .join('; ');
+    super(`send("${eventKey}") failed for ${errors.length} subscriber(s): ${summary}`);
+  }
+}
+
+/**
  * Thrown when delayed messages are requested but the plugin is not available.
  */
 export class DelayedMessagesNotSupportedError extends MatadorError {

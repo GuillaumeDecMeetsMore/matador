@@ -729,7 +729,8 @@ All errors in **Matador** extend `MatadorError` and include a `description` fiel
 | `TransportNotConnectedError`      | Transport is not connected to the message broker.                                          |
 | `TransportClosedError`            | Transport has been closed (during shutdown).                                               |
 | `AllTransportsFailedError`        | All transports in a fallback chain failed.                                                 |
-| `TransportSendError`              | Failed to send a message through the transport.                                            |
+| `SomeSendError`                | One or more subscriber publishes failed during `send()`. Contains an `errors` array with per-failure details (`subscriberName`, `queue`, `error`). |
+| `TransportSendError`              | Failed to send a single message through the transport. Wrapped inside `SomeSendError.errors[n].error` as the underlying cause.                                             |
 | `DelayedMessagesNotSupportedError`| Delayed messages requested but transport doesn't support them.                             |
 | `EventNotRegisteredError`         | Event type is not registered in the schema.                                                |
 | `SubscriberNotRegisteredError`    | Subscriber is not registered for this event.                                               |
