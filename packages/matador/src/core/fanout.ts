@@ -1,7 +1,8 @@
 import { TransportSendError } from '../errors/index.js';
 import type { SafeHooks } from '../hooks/index.js';
 import type { SchemaRegistry } from '../schema/index.js';
-import { getQualifiedQueueName } from '../topology/index.js';
+import type { Topology } from '../topology/index.js';
+import { resolveTargetQueueName } from '../topology/index.js';
 import type { Transport } from '../transport/index.js';
 import type {
   AnySubscriber,
@@ -18,7 +19,7 @@ export interface FanoutConfig {
   readonly transport: Transport;
   readonly schema: SchemaRegistry;
   readonly hooks: SafeHooks;
-  readonly namespace: string;
+  readonly topology: Topology;
   readonly defaultQueue: string;
 }
 
@@ -54,7 +55,7 @@ export class FanoutEngine {
   private readonly transport: Transport;
   private readonly schema: SchemaRegistry;
   private readonly hooks: SafeHooks;
-  private readonly namespace: string;
+  private readonly topology: Topology;
   private readonly defaultQueue: string;
   private enqueuingCount = 0;
 
@@ -62,7 +63,7 @@ export class FanoutEngine {
     this.transport = config.transport;
     this.schema = config.schema;
     this.hooks = config.hooks;
-    this.namespace = config.namespace;
+    this.topology = config.topology;
     this.defaultQueue = config.defaultQueue;
   }
 
@@ -107,7 +108,7 @@ export class FanoutEngine {
 
       // Determine target queue
       const targetQueue = subscriber.targetQueue ?? this.defaultQueue;
-      const qualifiedQueue = getQualifiedQueueName(this.namespace, targetQueue);
+      const qualifiedQueue = resolveTargetQueueName(this.topology, targetQueue);
 
       // Create envelope
       const envelope = createEnvelope({

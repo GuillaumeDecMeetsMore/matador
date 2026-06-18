@@ -36,3 +36,4 @@ pnpm-lock.yaml
 *.tmp
 *.temp
 .cache/
+*.tgz

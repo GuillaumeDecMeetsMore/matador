@@ -4,6 +4,7 @@ import type {
   QueueDefinition,
   RetryConfig,
   Topology,
+  TopologyNaming,
 } from './types.js';
 
 /**
@@ -62,12 +63,25 @@ export class TopologyBuilder {
     defaultDelayMs: 1000,
     maxDelayMs: 300000, // 5 minutes
   };
+  private naming: TopologyNaming | undefined;
 
   /**
    * Sets the namespace prefix for all queues.
    */
   withNamespace(namespace: string): this {
     this.namespace = namespace;
+    return this;
+  }
+
+  /**
+   * Overrides how broker resource names are derived.
+   * Use during migrations to keep pre-existing queue/exchange names so a
+   * rolling deploy keeps routing through the resources already declared on
+   * the broker.
+   * @see TopologyNaming
+   */
+  withNaming(naming: TopologyNaming): this {
+    this.naming = naming;
     return this;
   }
 
@@ -165,6 +179,7 @@ export class TopologyBuilder {
       ...validateNamespace(this.namespace),
       ...validateQueues(this.queues),
       ...validateRetry(this.retry),
+      ...validateNaming(this.naming),
     ];
   }
 
@@ -186,6 +201,7 @@ export class TopologyBuilder {
       queues: [...this.queues],
       deadLetter: this.deadLetter,
       retry: this.retry,
+      naming: this.naming,
     };
   }
 }
@@ -243,6 +259,32 @@ function validateQueues(queues: readonly QueueDefinition[]): string[] {
   for (const queue of queues) {
     issues.push(...validateQueueName(queue, seen));
     issues.push(...validateQueueLimits(queue));
+  }
+  return issues;
+}
+
+function validateNaming(naming: TopologyNaming | undefined): string[] {
+  if (!naming) return [];
+  const issues: string[] = [];
+  for (const field of [
+    'queue',
+    'mainExchange',
+    'dlxExchange',
+    'delayedExchange',
+  ] as const) {
+    const value = naming[field];
+    if (value !== undefined && typeof value !== 'function') {
+      issues.push(`Naming override "${field}" must be a function`);
+    }
+  }
+  if (
+    naming.dlxExchangeType !== undefined &&
+    naming.dlxExchangeType !== 'direct' &&
+    naming.dlxExchangeType !== 'topic'
+  ) {
+    issues.push(
+      `Naming override "dlxExchangeType" must be 'direct' or 'topic'`,
+    );
   }
   return issues;
 }

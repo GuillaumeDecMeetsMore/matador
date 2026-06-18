@@ -3,6 +3,7 @@ import { TransportSendError } from '../errors/index.js';
 import { SafeHooks } from '../hooks/index.js';
 import type { MatadorHooks } from '../hooks/index.js';
 import { SchemaRegistry } from '../schema/index.js';
+import { TopologyBuilder } from '../topology/index.js';
 import type { Transport } from '../transport/index.js';
 import {
   MatadorEvent,
@@ -43,6 +44,11 @@ class UserCreatedEventWithMetadata extends MatadorEvent {
   }
 }
 
+const testTopology = TopologyBuilder.create()
+  .withNamespace('test')
+  .addQueue('events')
+  .build();
+
 describe('FanoutEngine', () => {
   let transport: Transport;
   let schema: SchemaRegistry;
@@ -81,7 +87,7 @@ describe('FanoutEngine', () => {
       transport,
       schema,
       hooks,
-      namespace: 'test',
+      topology: testTopology,
       defaultQueue: 'events',
     });
   });
@@ -96,7 +102,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
       expect(instance).toBeInstanceOf(FanoutEngine);
@@ -436,7 +442,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -663,7 +669,7 @@ describe('FanoutEngine', () => {
         transport: failingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -708,7 +714,7 @@ describe('FanoutEngine', () => {
         transport: failingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -755,7 +761,7 @@ describe('FanoutEngine', () => {
         transport: failingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -801,7 +807,7 @@ describe('FanoutEngine', () => {
         transport: trackingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -855,7 +861,7 @@ describe('FanoutEngine', () => {
         transport: failingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -911,7 +917,7 @@ describe('FanoutEngine', () => {
         transport: trackingTransport,
         schema,
         hooks,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -1021,7 +1027,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -1075,7 +1081,7 @@ describe('FanoutEngine', () => {
         transport: failingTransport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -1122,7 +1128,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -1165,7 +1171,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 
@@ -1201,7 +1207,7 @@ describe('FanoutEngine', () => {
         transport,
         schema,
         hooks: hooksInstance,
-        namespace: 'test',
+        topology: testTopology,
         defaultQueue: 'events',
       });
 

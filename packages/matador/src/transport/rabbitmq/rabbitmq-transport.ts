@@ -1,12 +1,20 @@
-import type { Channel, ChannelModel, ConsumeMessage, Options } from 'amqplib';
+import type {
+  Channel,
+  ChannelModel,
+  ConfirmChannel,
+  ConsumeMessage,
+  Options,
+} from 'amqplib';
 import amqplib from 'amqplib';
 import { RabbitMQCodec } from '../../codec/rabbitmq-codec.js';
 import {
   DelayedMessagesNotSupportedError,
   TransportNotConnectedError,
+  TransportSendError,
 } from '../../errors/index.js';
 import { type Logger, consoleLogger } from '../../hooks/index.js';
 import type { QueueDefinition, Topology } from '../../topology/types.js';
+import { resolveQueueName } from '../../topology/types.js';
 import type { Envelope } from '../../types/index.js';
 import type { TransportCapabilities } from '../capabilities.js';
 import {
@@ -43,6 +51,16 @@ export interface RabbitMQTransportConfig {
 
   /** Enable the delayed message exchange plugin if available (default: true) */
   readonly enableDelayedMessages?: boolean | undefined;
+
+  /**
+   * How long to wait for the broker to confirm a publish before failing,
+   * in milliseconds (default: 5000).
+   *
+   * Publishes use a confirm channel: `send()` resolves only once the broker
+   * acks the message, and rejects on nack or timeout, so callers can await
+   * delivery confirmation rather than treating publishes as fire-and-forget.
+   */
+  readonly publishTimeoutMs?: number | undefined;
 
   /** Logger for transport events (defaults to console) */
   readonly logger?: Logger | undefined;
@@ -98,7 +116,7 @@ export class RabbitMQTransport implements Transport {
   }
 
   private connection: ChannelModel | null = null;
-  private publishChannel: Channel | null = null;
+  private publishChannel: ConfirmChannel | null = null;
   private readonly connectionManager: ConnectionManager;
   private readonly queueChannels = new Map<string, QueueChannel>();
   private topology: Topology | null = null;
@@ -122,6 +140,7 @@ export class RabbitMQTransport implements Transport {
       quorumQueues: config.quorumQueues ?? true,
       defaultPrefetch: config.defaultPrefetch ?? 10,
       enableDelayedMessages: config.enableDelayedMessages ?? true,
+      publishTimeoutMs: config.publishTimeoutMs ?? 5000,
     };
 
     this.connectionManager = new ConnectionManager(
@@ -153,21 +172,25 @@ export class RabbitMQTransport implements Transport {
     const channel = this.publishChannel;
 
     // Create the main exchange for routing messages to queues
-    const mainExchange = this.getMainExchangeName(topology.namespace);
+    const mainExchange = this.getMainExchangeName(topology);
     await channel.assertExchange(mainExchange, 'direct', { durable: true });
 
     // Create dead-letter exchange if DLQ is enabled
-    const dlxExchange = this.getDLXExchangeName(topology.namespace);
+    const dlxExchange = this.getDLXExchangeName(topology);
     if (
       topology.deadLetter.unhandled.enabled ||
       topology.deadLetter.undeliverable.enabled
     ) {
-      await channel.assertExchange(dlxExchange, 'direct', { durable: true });
+      await channel.assertExchange(
+        dlxExchange,
+        topology.naming?.dlxExchangeType ?? 'direct',
+        { durable: true },
+      );
     }
 
     // Check for delayed message exchange plugin
     if (this.config.enableDelayedMessages) {
-      await this.setupDelayedExchange(topology.namespace);
+      await this.setupDelayedExchange(topology);
     }
 
     // Create work queues
@@ -215,14 +238,13 @@ export class RabbitMQTransport implements Transport {
         throw new DelayedMessagesNotSupportedError(this.name);
       }
 
-      const delayedExchange = this.getDelayedExchangeName(
-        this.topology.namespace,
-      );
+      const delayedExchange = this.getDelayedExchangeName(this.topology);
       publishOptions.headers = {
         ...publishOptions.headers,
         'x-delay': options.delay,
       };
-      this.publishChannel.publish(
+      await this.confirmPublish(
+        this.publishChannel,
         delayedExchange,
         queue,
         buffer,
@@ -241,9 +263,15 @@ export class RabbitMQTransport implements Transport {
     }
 
     const routingKey = options?.transport?.rabbitmq?.routingKey ?? queue;
-    const exchange = this.getMainExchangeName(this.topology.namespace);
+    const exchange = this.getMainExchangeName(this.topology);
 
-    this.publishChannel.publish(exchange, routingKey, buffer, publishOptions);
+    await this.confirmPublish(
+      this.publishChannel,
+      exchange,
+      routingKey,
+      buffer,
+      publishOptions,
+    );
     return this.name;
   }
 
@@ -375,7 +403,7 @@ export class RabbitMQTransport implements Transport {
 
     const encoded = this.codec.encode(dlqEnvelope);
     const buffer = Buffer.from(encoded.body);
-    const dlxExchange = this.getDLXExchangeName(this.topology.namespace);
+    const dlxExchange = this.getDLXExchangeName(this.topology);
     const dlqQueueName = `${receipt.sourceQueue}.${dlqName}`;
 
     const publishOptions: Options.Publish = {
@@ -389,7 +417,8 @@ export class RabbitMQTransport implements Transport {
       },
     };
 
-    this.publishChannel.publish(
+    await this.confirmPublish(
+      this.publishChannel,
       dlxExchange,
       dlqQueueName,
       buffer,
@@ -398,6 +427,50 @@ export class RabbitMQTransport implements Transport {
 
     // Complete the original message
     await this.complete(receipt);
+  }
+
+  /**
+   * Publishes on the confirm channel and resolves once the broker
+   * acknowledges the message, rejecting on broker nack, channel error, or
+   * after `publishTimeoutMs` elapses without a confirm.
+   *
+   * Mirrors Matador v1's promise-wrapped amqplib publish callback to give
+   * callers confirmed (at-least-once) delivery semantics.
+   */
+  private confirmPublish(
+    channel: ConfirmChannel,
+    exchange: string,
+    routingKey: string,
+    buffer: Buffer,
+    options: Options.Publish,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let timeout: NodeJS.Timeout | null = setTimeout(() => {
+        timeout = null;
+        reject(
+          new TransportSendError(
+            routingKey,
+            new Error(
+              `Publish not confirmed by broker within ${this.config.publishTimeoutMs}ms`,
+            ),
+          ),
+        );
+      }, this.config.publishTimeoutMs);
+
+      channel.publish(exchange, routingKey, buffer, options, (err) => {
+        if (timeout) {
+          clearTimeout(timeout);
+        } else {
+          // Already timed out and rejected; nothing left to settle.
+          return;
+        }
+        if (err) {
+          reject(new TransportSendError(routingKey, err));
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 
   // Private methods
@@ -468,8 +541,9 @@ export class RabbitMQTransport implements Transport {
       }
     });
 
-    // Create the publish channel
-    this.publishChannel = await connection.createChannel();
+    // Create the publish channel.
+    // A confirm channel so publishes can await broker acknowledgement.
+    this.publishChannel = await connection.createConfirmChannel();
 
     // Handle publish channel errors to prevent unhandled error events
     this.publishChannel.on('error', (err: Error) => {
@@ -529,7 +603,7 @@ export class RabbitMQTransport implements Transport {
     };
   }
 
-  private async setupDelayedExchange(namespace: string): Promise<void> {
+  private async setupDelayedExchange(topology: Topology): Promise<void> {
     if (!this.connection) {
       return;
     }
@@ -537,7 +611,7 @@ export class RabbitMQTransport implements Transport {
     // Default to disabled
     this.delayedExchangeAvailable = false;
 
-    const delayedExchange = this.getDelayedExchangeName(namespace);
+    const delayedExchange = this.getDelayedExchangeName(topology);
     const connection = this.connection;
 
     // Use a promise-based approach to ensure all error paths resolve cleanly
@@ -619,7 +693,7 @@ export class RabbitMQTransport implements Transport {
       topology.deadLetter.undeliverable.enabled
     ) {
       queueOptions.arguments['x-dead-letter-exchange'] =
-        this.getDLXExchangeName(topology.namespace);
+        this.getDLXExchangeName(topology);
     }
 
     if (queueDef.priorities) {
@@ -638,9 +712,11 @@ export class RabbitMQTransport implements Transport {
     topology: Topology,
     queueDef: QueueDefinition,
   ): Promise<void> {
-    const queueName = queueDef.exact
-      ? queueDef.name
-      : `${topology.namespace}.${queueDef.name}`;
+    const queueName = resolveQueueName(
+      topology.namespace,
+      queueDef,
+      topology.naming,
+    );
 
     const rabbitmqOptions = queueDef.transport?.rabbitmq?.options;
     const queueOptions =
@@ -648,12 +724,12 @@ export class RabbitMQTransport implements Transport {
     await channel.assertQueue(queueName, queueOptions);
 
     // Bind queue to main exchange
-    const mainExchange = this.getMainExchangeName(topology.namespace);
+    const mainExchange = this.getMainExchangeName(topology);
     await channel.bindQueue(queueName, mainExchange, queueName);
 
     // Bind to delayed exchange if available
     if (this.delayedExchangeAvailable) {
-      const delayedExchange = this.getDelayedExchangeName(topology.namespace);
+      const delayedExchange = this.getDelayedExchangeName(topology);
       await channel.bindQueue(queueName, delayedExchange, queueName);
     }
 
@@ -674,7 +750,7 @@ export class RabbitMQTransport implements Transport {
     workQueueName: string,
   ): Promise<void> {
     const retryQueueName = `${workQueueName}.retry`;
-    const mainExchange = this.getMainExchangeName(topology.namespace);
+    const mainExchange = this.getMainExchangeName(topology);
 
     const retryQueueOptions: Options.AssertQueue = {
       durable: true,
@@ -698,13 +774,17 @@ export class RabbitMQTransport implements Transport {
     topology: Topology,
     dlqType: 'unhandled' | 'undeliverable',
   ): Promise<void> {
-    const dlxExchange = this.getDLXExchangeName(topology.namespace);
+    const dlxExchange = this.getDLXExchangeName(topology);
     const dlConfig = topology.deadLetter[dlqType];
 
     for (const queueDef of topology.queues) {
       if (queueDef.exact) continue;
 
-      const workQueueName = `${topology.namespace}.${queueDef.name}`;
+      const workQueueName = resolveQueueName(
+        topology.namespace,
+        queueDef,
+        topology.naming,
+      );
       const dlqName = `${workQueueName}.${dlqType}`;
 
       const dlqOptions: Options.AssertQueue = {
@@ -716,22 +796,37 @@ export class RabbitMQTransport implements Transport {
         dlqOptions.arguments['x-max-length'] = dlConfig.maxLength;
       }
 
-      // DLQs use classic queues (not quorum) for simplicity
+      // DLQs follow the same quorum setting as work and retry queues, so a
+      // broker node restart does not take the queue (and its messages) down
+      // with it.
+      if (this.config.quorumQueues) {
+        dlqOptions.arguments['x-queue-type'] = 'quorum';
+      }
+
       await channel.assertQueue(dlqName, dlqOptions);
       await channel.bindQueue(dlqName, dlxExchange, dlqName);
     }
   }
 
-  private getMainExchangeName(namespace: string): string {
-    return `${namespace}.exchange`;
+  private getMainExchangeName(topology: Topology): string {
+    return (
+      topology.naming?.mainExchange?.(topology.namespace) ??
+      `${topology.namespace}.exchange`
+    );
   }
 
-  private getDLXExchangeName(namespace: string): string {
-    return `${namespace}.dlx`;
+  private getDLXExchangeName(topology: Topology): string {
+    return (
+      topology.naming?.dlxExchange?.(topology.namespace) ??
+      `${topology.namespace}.dlx`
+    );
   }
 
-  private getDelayedExchangeName(namespace: string): string {
-    return `${namespace}.delayed`;
+  private getDelayedExchangeName(topology: Topology): string {
+    return (
+      topology.naming?.delayedExchange?.(topology.namespace) ??
+      `${topology.namespace}.delayed`
+    );
   }
 
   private getAttemptNumber(msg: ConsumeMessage): number {

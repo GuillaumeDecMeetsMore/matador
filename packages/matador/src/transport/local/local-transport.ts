@@ -1,6 +1,7 @@
 import { TransportNotConnectedError } from '../../errors/index.js';
 import { type Logger, consoleLogger } from '../../hooks/index.js';
 import type { Topology } from '../../topology/types.js';
+import { resolveQueueName } from '../../topology/types.js';
 import type { Envelope } from '../../types/index.js';
 import type { TransportCapabilities } from '../capabilities.js';
 import type {
@@ -98,7 +99,11 @@ export class LocalTransport implements Transport {
     // retries by re-enqueueing messages with a delay to the original queue, matching
     // how the pipeline schedules retries via transport.send() with a delay option.
     for (const queueDef of topology.queues) {
-      const queueName = `${topology.namespace}.${queueDef.name}`;
+      const queueName = resolveQueueName(
+        topology.namespace,
+        queueDef,
+        topology.naming,
+      );
       if (!this.queues.has(queueName)) {
         this.queues.set(queueName, []);
       }

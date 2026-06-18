@@ -101,13 +101,16 @@ export type {
   RabbitMQQueueOptions,
   RetryConfig,
   Topology,
+  TopologyNaming,
   TransportQueueOptions,
 } from './topology/index.js';
 export {
+  findQueueDefinition,
   getDeadLetterQueueName,
   getQualifiedQueueName,
   getRetryQueueName,
   resolveQueueName,
+  resolveTargetQueueName,
   TopologyBuilder,
   TopologyValidationError,
 } from './topology/index.js';
