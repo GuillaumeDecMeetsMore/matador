@@ -167,7 +167,12 @@ export class LocalTransport implements Transport {
     message: QueuedMessage,
   ): Promise<void> {
     const subs = this.subscriptions.get(queue);
-    if (!subs) return;
+    if (!subs) {
+      this.logger.warn(
+        `[Matador][LocalTransport] 🟡 No subscriptions found for queue '${queue}', message will be lost.`,
+      );
+      return;
+    }
 
     for (const sub of subs) {
       if (!sub.active || message.completed) continue;

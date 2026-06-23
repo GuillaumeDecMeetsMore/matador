@@ -4,8 +4,8 @@ import { JsonCodec } from '../codec/index.js';
 import {
   InvalidSchemaError,
   NotStartedError,
-  SomeSendError,
   ShutdownInProgressError,
+  SomeSendError,
 } from '../errors/index.js';
 import type { MatadorHooks } from '../hooks/index.js';
 import { SafeHooks } from '../hooks/index.js';
@@ -218,7 +218,12 @@ export class Matador implements Dispatcher {
       this.hooks.logger.info(
         `[Matador] 🟢 Worker subscribing to '${this.consumeFrom.join(',')}'.`,
       );
+    } else {
+      this.hooks.logger.info(
+        '[Matador] 🟡 Worker not subscribing to any queues (consumeFrom is empty).',
+      );
     }
+
     for (const queueName of this.consumeFrom) {
       const qualifiedName = getQualifiedQueueName(
         this.topology.namespace,
