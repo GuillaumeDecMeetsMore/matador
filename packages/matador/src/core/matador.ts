@@ -218,7 +218,12 @@ export class Matador implements Dispatcher {
       this.hooks.logger.info(
         `[Matador] 🟢 Worker subscribing to '${this.consumeFrom.join(',')}'.`,
       );
+    } else {
+      this.hooks.logger.info(
+        '[Matador] 🟡 Worker not subscribing to any queues (consumeFrom is empty).',
+      );
     }
+
     for (const queueName of this.consumeFrom) {
       const qualifiedName = getQualifiedQueueName(
         this.topology.namespace,
