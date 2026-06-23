@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import { TopologyBuilder, TopologyValidationError } from './builder.js';
-import { resolveQueueName } from './types.js';
+import {
+  type TopologyNaming,
+  findQueueDefinition,
+  getDeadLetterQueueName,
+  getQualifiedQueueName,
+  getRetryQueueName,
+  resolveQueueName,
+  resolveTargetQueueName,
+} from './types.js';
 
 describe('TopologyBuilder', () => {
   describe('withNamespace', () => {
@@ -447,5 +455,125 @@ describe('resolveQueueName', () => {
     expect(resolveQueueName('myapp', queueDef)).toBe(
       'matador.shared.id-platform',
     );
+  });
+});
+
+describe('TopologyNaming', () => {
+  const v1Naming = {
+    queue: (ns: string, q: string) => `matador.${ns}.${q}`,
+    mainExchange: (ns: string) => `matador.${ns}`,
+    dlxExchange: (ns: string) => `matador.${ns}.dlx-undeliverable`,
+    dlxExchangeType: 'topic' as const,
+    delayedExchange: (ns: string) => `matador.${ns}.delayed`,
+  };
+
+  describe('builder validation', () => {
+    it('should accept a valid naming configuration', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withNaming(v1Naming)
+        .addQueue('events')
+        .build();
+
+      expect(topology.naming?.queue?.('myapp', 'events')).toBe(
+        'matador.myapp.events',
+      );
+      expect(topology.naming?.mainExchange?.('myapp')).toBe('matador.myapp');
+    });
+
+    it('should accept partial naming overrides', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withNaming({ queue: (ns, q) => `legacy.matador.${ns}.${q}` })
+        .addQueue('events')
+        .build();
+
+      expect(topology.naming?.queue?.('myapp', 'events')).toBe(
+        'legacy.matador.myapp.events',
+      );
+    });
+
+    it('should reject a non-function naming override', () => {
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withNaming({ queue: 'matador.' } as unknown as TopologyNaming)
+          .addQueue('events')
+          .build(),
+      ).toThrow(TopologyValidationError);
+    });
+
+    it('should reject an invalid dlxExchangeType', () => {
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withNaming({
+            dlxExchangeType: 'fanout',
+          } as unknown as TopologyNaming)
+          .addQueue('events')
+          .build(),
+      ).toThrow(TopologyValidationError);
+    });
+  });
+
+  describe('name resolution with naming overrides', () => {
+    const topology = TopologyBuilder.create()
+      .withNamespace('myapp')
+      .withNaming({ queue: (ns, q) => `matador.${ns}.${q}` })
+      .addQueue('events')
+      .addQueue({
+        name: 'matador.shared.id-platform',
+        exact: true,
+      })
+      .build();
+
+    it('should build qualified queue names via the strategy', () => {
+      expect(getQualifiedQueueName('myapp', 'events', topology.naming)).toBe(
+        'matador.myapp.events',
+      );
+    });
+
+    it('should build resolved queue definitions via the strategy', () => {
+      const queueDef = { name: 'events' };
+      expect(resolveQueueName('myapp', queueDef, topology.naming)).toBe(
+        'matador.myapp.events',
+      );
+    });
+
+    it('should not transform exact queue definitions', () => {
+      const queueDef = { name: 'matador.shared.id-platform', exact: true };
+      expect(resolveQueueName('myapp', queueDef, topology.naming)).toBe(
+        'matador.shared.id-platform',
+      );
+    });
+
+    it('should resolve a target queue by exact name as-is', () => {
+      expect(
+        resolveTargetQueueName(topology, 'matador.shared.id-platform'),
+      ).toBe('matador.shared.id-platform');
+    });
+
+    it('should build non-exact target queues via the strategy', () => {
+      expect(resolveTargetQueueName(topology, 'events')).toBe(
+        'matador.myapp.events',
+      );
+    });
+
+    it('should derive retry and DLQ names from the strategy name', () => {
+      expect(getRetryQueueName('myapp', 'events', topology.naming)).toBe(
+        'matador.myapp.events.retry',
+      );
+      expect(
+        getDeadLetterQueueName('myapp', 'events', 'unhandled', topology.naming),
+      ).toBe('matador.myapp.events.unhandled');
+    });
+
+    it('should find queue definitions by name', () => {
+      expect(findQueueDefinition(topology, 'events')?.name).toBe('events');
+      expect(
+        findQueueDefinition(topology, 'matador.shared.id-platform')?.name,
+      ).toBe('matador.shared.id-platform');
+      expect(findQueueDefinition(topology, 'missing')).toBeUndefined();
+    });
   });
 });

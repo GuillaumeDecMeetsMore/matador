@@ -1,6 +1,6 @@
 {
   "name": "@zdavison/matador",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "description": "A batteries-included event system.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -67,5 +67,9 @@
   "files": [
     "dist",
     "cli.ts"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meetsmore/matador.git"
+  }
 }

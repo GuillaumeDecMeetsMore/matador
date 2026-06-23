@@ -6,13 +6,16 @@ export type {
   RabbitMQQueueOptions,
   RetryConfig,
   Topology,
+  TopologyNaming,
   TransportQueueOptions,
 } from './types.js';
 export {
+  findQueueDefinition,
   getDeadLetterQueueName,
   getQualifiedQueueName,
   getRetryQueueName,
   resolveQueueName,
+  resolveTargetQueueName,
 } from './types.js';
 
 export type { QueueOptions } from './builder.js';

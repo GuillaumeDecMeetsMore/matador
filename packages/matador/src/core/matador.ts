@@ -15,7 +15,10 @@ import { StandardRetryPolicy } from '../retry/index.js';
 import type { MatadorSchema } from '../schema/index.js';
 import { SchemaRegistry, isSchemaEntryTuple } from '../schema/index.js';
 import type { Topology } from '../topology/index.js';
-import { getQualifiedQueueName } from '../topology/index.js';
+import {
+  findQueueDefinition,
+  resolveTargetQueueName,
+} from '../topology/index.js';
 import type { Subscription, Transport } from '../transport/index.js';
 import type {
   AnySubscriber,
@@ -125,7 +128,7 @@ export class Matador implements Dispatcher {
       transport: this.transport,
       schema: this.schema,
       hooks: this.hooks,
-      namespace: this.topology.namespace,
+      topology: this.topology,
       defaultQueue,
     });
 
@@ -225,11 +228,8 @@ export class Matador implements Dispatcher {
     }
 
     for (const queueName of this.consumeFrom) {
-      const qualifiedName = getQualifiedQueueName(
-        this.topology.namespace,
-        queueName,
-      );
-      const queueDef = this.topology.queues.find((q) => q.name === queueName);
+      const qualifiedName = resolveTargetQueueName(this.topology, queueName);
+      const queueDef = findQueueDefinition(this.topology, queueName);
 
       const subscription = await this.transport.subscribe(
         qualifiedName,

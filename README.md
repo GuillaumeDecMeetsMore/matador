@@ -362,6 +362,13 @@ The practice of taking a single published event and creating `N` concrete events
 A representation of a message broker or event backend. e.g `RabbitMQ`, `BullMQ`, `Temporal`, etc.
 Currently, only `RabbitMQ` is supported.
 
+The RabbitMQ transport publishes on a **confirm channel**: `send()` resolves
+only after the broker acknowledges the message, and rejects with
+`TransportSendError` on a broker nack or when no confirm arrives within
+`publishTimeoutMs` (default: 5000ms). Callers can await delivery
+confirmation at the call site (or rely on `MultiTransport` fallback) rather
+than treating publishes as fire-and-forget.
+
 ### `Topology`
 
 The structure of queues, exchanges, topics, etc that **Matador** will create and manage.
@@ -433,7 +440,7 @@ When using `RabbitMQ`, `RabbitMQCodec` is used, which still uses `JSONCodec` int
 | `concurrency`     | -       | Number of concurrent consumers for this queue              |
 | `consumerTimeout` | -       | Consumer timeout in milliseconds                           |
 | `priorities`      | false   | Enable priority support if transport allows                |
-| `exact`           | false   | Use queue name exactly without namespace prefix            |
+| `exact`           | false   | See [exact-queues](#exact-queues).  |
 
 **Retry Policy** defaults (`StandardRetryPolicy`):
 
@@ -972,6 +979,40 @@ await matador.send(ScheduledNotificationEvent, notificationData, {
   metadata: { scheduledBy: 'cron-job' },
 });
 ```
+
+#### Migrations from v1
+
+To adopt v3 from v1 without renaming, override how names are derived with `withNaming()`. Each builder receives the namespace from `withNamespace()` as an argument and returns the final name — so the namespace is always an explicit input to the strategy, never applied separately on top of the result:
+
+```typescript
+TopologyBuilder.create()
+  .withNamespace('myapp')
+  .withNaming({
+    queue: (ns, q) => `matador.${ns}.${q}`,                 // queues: matador.myapp.{queue}
+    mainExchange: (ns) => `matador.${ns}`,                  // v1 main exchange
+    dlxExchange: (ns) => `matador.${ns}.dlx-undeliverable`, // v1 dead-letter exchange…
+    dlxExchangeType: 'topic',                               // …which v1 declared as topic
+    delayedExchange: (ns) => `matador.${ns}.delayed`,
+  })
+  .addQueue('general')
+  .build()
+```
+
+Retry queues and dead-letter queues are derived from the work-queue name your `queue` builder returns. All builders are optional; omit any to keep the default (`${namespace}.…`).
+
+#### Exact queues
+
+Setting `exact: true` marks a queue as owned by another service. When set:
+
+- The queue name is used exactly as written without namespace prefix.
+- Matador still asserts the queue and binds it to this namespace's main exchange, so `send()` can route to it.
+- Matador does **not** create the resources it normally manages alongside a queue: 
+  no `.retry`, `.unhandled`, `.undeliverable` queues, no `x-queue-type: quorum` argument.
+- Pass `transport.rabbitmq.options` mirroring the owner's declaration. Without it, the auto-computed defaults use *your*
+  namespace's dead-letter exchange, which won't match the existing queue thus `PRECONDITION_FAILED`.
+- To target or consume it, reference it by its full exact name in
+  `targetQueue` / `consumeFrom` — it resolves as-is, without the
+  namespace prefix.
 
 # CLI
 
