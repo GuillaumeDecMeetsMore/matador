@@ -4,8 +4,8 @@ import { JsonCodec } from '../codec/index.js';
 import {
   InvalidSchemaError,
   NotStartedError,
-  SomeSendError,
   ShutdownInProgressError,
+  SomeSendError,
 } from '../errors/index.js';
 import type { MatadorHooks } from '../hooks/index.js';
 import { SafeHooks } from '../hooks/index.js';

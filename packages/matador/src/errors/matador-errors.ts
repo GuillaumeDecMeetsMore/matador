@@ -194,7 +194,9 @@ export class SomeSendError extends MatadorError {
     const summary = errors
       .map((e) => `${e.subscriberName} (${e.queue}): ${e.error.message}`)
       .join('; ');
-    super(`send("${eventKey}") failed for ${errors.length} subscriber(s): ${summary}`);
+    super(
+      `send("${eventKey}") failed for ${errors.length} subscriber(s): ${summary}`,
+    );
   }
 }
 
