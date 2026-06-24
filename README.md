@@ -980,6 +980,30 @@ await matador.send(ScheduledNotificationEvent, notificationData, {
 });
 ```
 
+#### Resource name prefix
+
+By default, Matador prefixes every broker resource it creates with `matador`, so its queues and exchanges are identifiable on a shared broker:
+
+```typescript
+TopologyBuilder.create()
+  .withNamespace('myapp')
+  .addQueue('events')
+  .build()
+// → matador.myapp.events, matador.myapp.exchange, matador.myapp.dlx,
+//   matador.myapp.events.retry, matador.myapp.events.unhandled, …
+```
+
+Change the prefix, or disable it entirely, with `withGlobalPrefix()`:
+
+```typescript
+.withGlobalPrefix('acme')  // acme.myapp.events
+.withGlobalPrefix(null)    // myapp.events  (no prefix)
+```
+
+The prefix applies only to default-derived names. A `withNaming()` override (below) fully owns its output and is never prefixed. `exact: true` queues are never prefixed.
+
+> **BREAKING:** default resource names are now `matador`-prefixed. A v3 deployment created before this change used unprefixed names (`{namespace}.{queue}`); add `.withGlobalPrefix(null)` to keep them and avoid declaring a new set of queues.
+
 #### Migrations from v1
 
 To adopt v3 from v1 without renaming, override how names are derived with `withNaming()`. Each builder receives the namespace from `withNamespace()` as an argument and returns the final name — so the namespace is always an explicit input to the strategy, never applied separately on top of the result:
@@ -998,7 +1022,7 @@ TopologyBuilder.create()
   .build()
 ```
 
-Retry queues and dead-letter queues are derived from the work-queue name your `queue` builder returns. All builders are optional; omit any to keep the default (`${namespace}.…`).
+Retry queues and dead-letter queues are derived from the work-queue name your `queue` builder returns. All builders are optional; omit any to keep the default (`matador.${namespace}.…`, or `${namespace}.…` when the prefix is disabled via `withGlobalPrefix(null)`).
 
 #### Exact queues
 
@@ -1013,6 +1037,15 @@ Setting `exact: true` marks a queue as owned by another service. When set:
 - To target or consume it, reference it by its full exact name in
   `targetQueue` / `consumeFrom` — it resolves as-is, without the
   namespace prefix.
+- It must still be declared with `.addQueue({ name, exact: true })`. A
+  `targetQueue` / `consumeFrom` reference that is **not** declared in the
+  topology throws `UnknownQueueReferenceError` at dispatch/subscribe time,
+  rather than being silently namespace-qualified and routed to a queue
+  nobody consumes.
+
+> **Every queue reference must be declared.** This applies to Matador-owned
+> queues too: a subscriber's `targetQueue` or a `consumeFrom` entry that was
+> never added via `.addQueue(...)` throws `UnknownQueueReferenceError`.
 
 # CLI
 
