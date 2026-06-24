@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { UnknownQueueReferenceError } from '../errors/matador-errors.js';
 import { TopologyBuilder, TopologyValidationError } from './builder.js';
 import {
   type TopologyNaming,
@@ -574,6 +575,149 @@ describe('TopologyNaming', () => {
         findQueueDefinition(topology, 'matador.shared.id-platform')?.name,
       ).toBe('matador.shared.id-platform');
       expect(findQueueDefinition(topology, 'missing')).toBeUndefined();
+    });
+
+    it('should throw for a queue reference not declared in the topology', () => {
+      // A targetQueue/consumeFrom name that was never added to the topology
+      // must fail loudly rather than be silently namespace-qualified and
+      // routed to a queue nobody consumes.
+      expect(() =>
+        resolveTargetQueueName(topology, 'ext-service.payments'),
+      ).toThrow(UnknownQueueReferenceError);
+    });
+  });
+});
+
+describe('resource name prefix', () => {
+  describe('default', () => {
+    it('prefixes resource names with "matador" by default', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .addQueue('events')
+        .build();
+
+      expect(topology.prefix).toBe('matador');
+      expect(resolveTargetQueueName(topology, 'events')).toBe(
+        'matador.myapp.events',
+      );
+    });
+
+    it('inherits the default prefix into retry and DLQ names', () => {
+      expect(getRetryQueueName('myapp', 'events', undefined, 'matador')).toBe(
+        'matador.myapp.events.retry',
+      );
+      expect(
+        getDeadLetterQueueName(
+          'myapp',
+          'events',
+          'unhandled',
+          undefined,
+          'matador',
+        ),
+      ).toBe('matador.myapp.events.unhandled');
+    });
+  });
+
+  describe('withGlobalPrefix', () => {
+    it('uses a custom prefix string', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withGlobalPrefix('acme')
+        .addQueue('events')
+        .build();
+
+      expect(topology.prefix).toBe('acme');
+      expect(resolveTargetQueueName(topology, 'events')).toBe(
+        'acme.myapp.events',
+      );
+    });
+
+    it('disables prefixing when set to null', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withGlobalPrefix(null)
+        .addQueue('events')
+        .build();
+
+      expect(topology.prefix).toBeNull();
+      expect(resolveTargetQueueName(topology, 'events')).toBe('myapp.events');
+    });
+  });
+
+  describe('helper-level prefixing', () => {
+    it('applies a non-null prefix to the default qualified name', () => {
+      expect(getQualifiedQueueName('myapp', 'events', undefined, 'acme')).toBe(
+        'acme.myapp.events',
+      );
+    });
+
+    it('omits the prefix when null or undefined', () => {
+      expect(getQualifiedQueueName('myapp', 'events', undefined, null)).toBe(
+        'myapp.events',
+      );
+      expect(
+        getQualifiedQueueName('myapp', 'events', undefined, undefined),
+      ).toBe('myapp.events');
+    });
+  });
+
+  describe('composition with withNaming', () => {
+    it('does not prefix names produced by a withNaming override', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withGlobalPrefix('matador')
+        .withNaming({ queue: (_ns, q) => `legacy-${q}` })
+        .addQueue('events')
+        .build();
+
+      // The override fully owns the name; the prefix is not prepended.
+      expect(resolveTargetQueueName(topology, 'events')).toBe('legacy-events');
+    });
+  });
+
+  describe('validation', () => {
+    it('rejects an empty-string prefix', () => {
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withGlobalPrefix('')
+          .addQueue('events')
+          .build(),
+      ).toThrow(TopologyValidationError);
+    });
+
+    it('rejects a prefix that is not a valid identifier', () => {
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withGlobalPrefix('1bad')
+          .addQueue('events')
+          .build(),
+      ).toThrow(TopologyValidationError);
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withGlobalPrefix('has space')
+          .addQueue('events')
+          .build(),
+      ).toThrow(TopologyValidationError);
+    });
+
+    it('accepts null (no prefix) and valid identifier prefixes', () => {
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withGlobalPrefix(null)
+          .addQueue('events')
+          .build(),
+      ).not.toThrow();
+      expect(() =>
+        TopologyBuilder.create()
+          .withNamespace('myapp')
+          .withGlobalPrefix('acme_co-1')
+          .addQueue('events')
+          .build(),
+      ).not.toThrow();
     });
   });
 });

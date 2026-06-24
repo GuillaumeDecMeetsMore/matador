@@ -14,7 +14,12 @@ import {
 } from '../../errors/index.js';
 import { type Logger, consoleLogger } from '../../hooks/index.js';
 import type { QueueDefinition, Topology } from '../../topology/types.js';
-import { resolveQueueName } from '../../topology/types.js';
+import {
+  applyPrefix,
+  getDeadLetterQueueName,
+  getRetryQueueName,
+  resolveQueueName,
+} from '../../topology/types.js';
 import type { Envelope } from '../../types/index.js';
 import type { TransportCapabilities } from '../capabilities.js';
 import {
@@ -768,6 +773,7 @@ export class RabbitMQTransport implements Transport {
       topology.namespace,
       queueDef,
       topology.naming,
+      topology.prefix,
     );
 
     const rabbitmqOptions = queueDef.transport?.rabbitmq?.options;
@@ -792,16 +798,27 @@ export class RabbitMQTransport implements Transport {
     // namespaces share the broker and the queue. This mirrors the existing
     // `if (queueDef.exact) continue` guard in `assertDeadLetterQueues`.
     if (topology.retry.enabled && !queueDef.exact) {
-      await this.assertRetryQueue(channel, topology, queueName);
+      await this.assertRetryQueue(channel, topology, queueDef);
     }
   }
 
   private async assertRetryQueue(
     channel: Channel,
     topology: Topology,
-    workQueueName: string,
+    queueDef: QueueDefinition,
   ): Promise<void> {
-    const retryQueueName = `${workQueueName}.retry`;
+    const workQueueName = resolveQueueName(
+      topology.namespace,
+      queueDef,
+      topology.naming,
+      topology.prefix,
+    );
+    const retryQueueName = getRetryQueueName(
+      topology.namespace,
+      queueDef.name,
+      topology.naming,
+      topology.prefix,
+    );
     const mainExchange = this.getMainExchangeName(topology);
 
     const retryQueueOptions: Options.AssertQueue = {
@@ -832,12 +849,13 @@ export class RabbitMQTransport implements Transport {
     for (const queueDef of topology.queues) {
       if (queueDef.exact) continue;
 
-      const workQueueName = resolveQueueName(
+      const dlqName = getDeadLetterQueueName(
         topology.namespace,
-        queueDef,
+        queueDef.name,
+        dlqType,
         topology.naming,
+        topology.prefix,
       );
-      const dlqName = `${workQueueName}.${dlqType}`;
 
       const dlqOptions: Options.AssertQueue = {
         durable: true,
@@ -863,21 +881,21 @@ export class RabbitMQTransport implements Transport {
   private getMainExchangeName(topology: Topology): string {
     return (
       topology.naming?.mainExchange?.(topology.namespace) ??
-      `${topology.namespace}.exchange`
+      applyPrefix(topology.prefix, `${topology.namespace}.exchange`)
     );
   }
 
   private getDLXExchangeName(topology: Topology): string {
     return (
       topology.naming?.dlxExchange?.(topology.namespace) ??
-      `${topology.namespace}.dlx`
+      applyPrefix(topology.prefix, `${topology.namespace}.dlx`)
     );
   }
 
   private getDelayedExchangeName(topology: Topology): string {
     return (
       topology.naming?.delayedExchange?.(topology.namespace) ??
-      `${topology.namespace}.delayed`
+      applyPrefix(topology.prefix, `${topology.namespace}.delayed`)
     );
   }
 

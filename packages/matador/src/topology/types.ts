@@ -1,3 +1,5 @@
+import { UnknownQueueReferenceError } from '../errors/matador-errors.js';
+
 /**
  * Transport-agnostic topology definition.
  * Matador owns the topology; transports translate and apply it.
@@ -22,6 +24,21 @@ export interface Topology {
    * the broker resources already in place.
    */
   readonly naming?: TopologyNaming | undefined;
+
+  /**
+   * Prefix prepended to every default-derived broker resource name so
+   * Matador-managed queues and exchanges are identifiable
+   * (e.g. `matador.{namespace}.{queue}`).
+   *
+   * `null` disables prefixing. Only applies to default names — a `naming`
+   * override fully owns its output and is never prefixed.
+   *
+   * Topologies built via {@link TopologyBuilder} default this to `'matador'`.
+   * When absent (e.g. a hand-built topology literal) no prefix is applied.
+   *
+   * @default 'matador'
+   */
+  readonly prefix?: string | null | undefined;
 }
 
 /**
@@ -35,6 +52,10 @@ export interface Topology {
  *  - main exchange: `${namespace}.exchange`
  *  - dead-letter exchange: `${namespace}.dlx`
  *  - delayed exchange: `${namespace}.delayed`
+ *
+ * Retry queues and DLQs have no builder of their own: they are derived from the
+ * work-queue name (`<queue>.retry`, `<queue>.unhandled`, `<queue>.undeliverable`),
+ * so overriding `queue` carries your prefix into them automatically.
  *
  * Intended for migrations: an adopter can keep pre-existing names (e.g. from
  * Matador v1) so a rolling deploy keeps using the broker resources already in
@@ -205,15 +226,31 @@ export interface RetryConfig {
 }
 
 /**
+ * Prepends a resource-name prefix unless it is disabled.
+ * `null`/`undefined` mean no prefix; a string is prepended as `${prefix}.`.
+ */
+export function applyPrefix(
+  prefix: string | null | undefined,
+  name: string,
+): string {
+  return prefix == null ? name : `${prefix}.${name}`;
+}
+
+/**
  * Gets the fully qualified work-queue name.
- * An optional naming strategy may override how the name is derived.
+ * An optional naming strategy may override how the name is derived; otherwise
+ * the default is `${namespace}.${queueName}`, optionally prefixed.
  */
 export function getQualifiedQueueName(
   namespace: string,
   queueName: string,
   naming?: TopologyNaming,
+  prefix?: string | null,
 ): string {
-  return naming?.queue?.(namespace, queueName) ?? `${namespace}.${queueName}`;
+  return (
+    naming?.queue?.(namespace, queueName) ??
+    applyPrefix(prefix, `${namespace}.${queueName}`)
+  );
 }
 
 /**
@@ -224,8 +261,9 @@ export function getDeadLetterQueueName(
   queueName: string,
   dlqType: 'unhandled' | 'undeliverable',
   naming?: TopologyNaming,
+  prefix?: string | null,
 ): string {
-  return `${getQualifiedQueueName(namespace, queueName, naming)}.${dlqType}`;
+  return `${getQualifiedQueueName(namespace, queueName, naming, prefix)}.${dlqType}`;
 }
 
 /**
@@ -235,24 +273,26 @@ export function getRetryQueueName(
   namespace: string,
   queueName: string,
   naming?: TopologyNaming,
+  prefix?: string | null,
 ): string {
-  return `${getQualifiedQueueName(namespace, queueName, naming)}.retry`;
+  return `${getQualifiedQueueName(namespace, queueName, naming, prefix)}.retry`;
 }
 
 /**
  * Resolves the actual queue name for a given queue definition.
  * When exact: true, returns name as-is. Otherwise, returns the
- * namespace-qualified name (honoring any naming overrides).
+ * namespace-qualified name (honoring any naming overrides and prefix).
  */
 export function resolveQueueName(
   namespace: string,
   queueDef: QueueDefinition,
   naming?: TopologyNaming,
+  prefix?: string | null,
 ): string {
   if (queueDef.exact) {
     return queueDef.name;
   }
-  return getQualifiedQueueName(namespace, queueDef.name, naming);
+  return getQualifiedQueueName(namespace, queueDef.name, naming, prefix);
 }
 
 /**
@@ -269,16 +309,29 @@ export function findQueueDefinition(
  * Resolves a local queue reference (a subscriber's `targetQueue` or a
  * `consumeFrom` entry) to the transport-level queue name.
  *
- * A reference matching an exact queue's name resolves to that name as-is;
- * everything else is namespace-qualified (honoring any naming overrides).
+ * The reference must be declared in the topology via `.addQueue(...)`:
+ * an exact queue resolves to its name as-is; a Matador-owned queue is
+ * namespace-qualified (honoring any naming overrides). An undeclared
+ * reference throws {@link UnknownQueueReferenceError} rather than being
+ * silently qualified and routed to a queue nobody consumes.
+ *
+ * @throws UnknownQueueReferenceError if `queueName` is not in `topology.queues`.
  */
 export function resolveTargetQueueName(
   topology: Topology,
   queueName: string,
 ): string {
   const def = findQueueDefinition(topology, queueName);
-  if (def?.exact) {
+  if (def === undefined) {
+    throw new UnknownQueueReferenceError(queueName);
+  }
+  if (def.exact) {
     return def.name;
   }
-  return getQualifiedQueueName(topology.namespace, queueName, topology.naming);
+  return getQualifiedQueueName(
+    topology.namespace,
+    queueName,
+    topology.naming,
+    topology.prefix,
+  );
 }

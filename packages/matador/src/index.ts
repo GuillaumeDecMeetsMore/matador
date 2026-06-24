@@ -105,6 +105,7 @@ export type {
   TransportQueueOptions,
 } from './topology/index.js';
 export {
+  applyPrefix,
   findQueueDefinition,
   getDeadLetterQueueName,
   getQualifiedQueueName,
@@ -209,6 +210,8 @@ export {
   LocalTransportCannotProcessStubError,
   // Queue errors
   QueueNotFoundError,
+  UnknownQueueReferenceError,
+  isUnknownQueueReferenceError,
   // Event validation errors
   InvalidEventError,
   // Message processing errors
