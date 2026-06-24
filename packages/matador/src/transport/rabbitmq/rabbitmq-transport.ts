@@ -604,6 +604,8 @@ export class RabbitMQTransport implements Transport {
         await this.activateIntent(intent);
       }
     }
+
+    this.logger.info('[Matador] 🔌 Connected to RabbitMQ');
   }
 
   private async doDisconnect(): Promise<void> {
