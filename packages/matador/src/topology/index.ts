@@ -4,6 +4,7 @@ export type {
   QueueDefinition,
   RabbitMQQueueDefinition,
   RabbitMQQueueOptions,
+  ResourcePrefix,
   RetryConfig,
   Topology,
   TopologyNaming,

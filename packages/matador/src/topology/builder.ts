@@ -2,6 +2,7 @@ import type { HasDescription } from '../errors/index.js';
 import type {
   DeadLetterConfig,
   QueueDefinition,
+  ResourcePrefix,
   RetryConfig,
   Topology,
   TopologyNaming,
@@ -64,7 +65,7 @@ export class TopologyBuilder {
     maxDelayMs: 300000, // 5 minutes
   };
   private naming: TopologyNaming | undefined;
-  private prefix: Topology['prefix'] = 'matador';
+  private prefix: ResourcePrefix = 'matador';
 
   /**
    * Sets the namespace prefix for all queues.
@@ -82,13 +83,15 @@ export class TopologyBuilder {
    * Only applies to default names — a {@link withNaming} override fully owns
    * its output and is never prefixed.
    *
+   * Pass `null` or `undefined` to disable prefixing.
+   *
    * @default 'matador'
    * @example
    * TopologyBuilder.create().withNamespace('myapp')            // matador.myapp.events
    * TopologyBuilder.create().withNamespace('myapp').withGlobalPrefix('acme')  // acme.myapp.events
    * TopologyBuilder.create().withNamespace('myapp').withGlobalPrefix(null)    // myapp.events
    */
-  withGlobalPrefix(prefix: string | null): this {
+  withGlobalPrefix(prefix: ResourcePrefix): this {
     this.prefix = prefix;
     return this;
   }
@@ -242,7 +245,7 @@ function validateNamespace(namespace: string): string[] {
   return [];
 }
 
-function validatePrefix(prefix: Topology['prefix']): string[] {
+function validatePrefix(prefix: ResourcePrefix): string[] {
   // null/undefined explicitly disable prefixing.
   if (prefix == null) {
     return [];
