@@ -1,6 +1,19 @@
 import { UnknownQueueReferenceError } from '../errors/matador-errors.js';
 
 /**
+ * A prefix prepended to every default-derived broker resource name so
+ * Matador-managed queues and exchanges are identifiable
+ * (e.g. `matador.{namespace}.{queue}`).
+ *
+ * A string is prepended as `${prefix}.`; `null` or `undefined` disables
+ * prefixing. Only applies to default names — a {@link TopologyNaming}
+ * override fully owns its output and is never prefixed.
+ *
+ * @example 'matador'
+ */
+export type ResourcePrefix = string | null | undefined;
+
+/**
  * Transport-agnostic topology definition.
  * Matador owns the topology; transports translate and apply it.
  */
@@ -38,7 +51,7 @@ export interface Topology {
    *
    * @default 'matador'
    */
-  readonly prefix?: string | null | undefined;
+  readonly prefix?: ResourcePrefix;
 }
 
 /**
@@ -229,10 +242,7 @@ export interface RetryConfig {
  * Prepends a resource-name prefix unless it is disabled.
  * `null`/`undefined` mean no prefix; a string is prepended as `${prefix}.`.
  */
-export function applyPrefix(
-  prefix: string | null | undefined,
-  name: string,
-): string {
+export function applyPrefix(prefix: ResourcePrefix, name: string): string {
   return prefix == null ? name : `${prefix}.${name}`;
 }
 
@@ -245,7 +255,7 @@ export function getQualifiedQueueName(
   namespace: string,
   queueName: string,
   naming?: TopologyNaming,
-  prefix?: string | null,
+  prefix?: ResourcePrefix,
 ): string {
   return (
     naming?.queue?.(namespace, queueName) ??
@@ -261,7 +271,7 @@ export function getDeadLetterQueueName(
   queueName: string,
   dlqType: 'unhandled' | 'undeliverable',
   naming?: TopologyNaming,
-  prefix?: string | null,
+  prefix?: ResourcePrefix,
 ): string {
   return `${getQualifiedQueueName(namespace, queueName, naming, prefix)}.${dlqType}`;
 }
@@ -273,7 +283,7 @@ export function getRetryQueueName(
   namespace: string,
   queueName: string,
   naming?: TopologyNaming,
-  prefix?: string | null,
+  prefix?: ResourcePrefix,
 ): string {
   return `${getQualifiedQueueName(namespace, queueName, naming, prefix)}.retry`;
 }
@@ -287,7 +297,7 @@ export function resolveQueueName(
   namespace: string,
   queueDef: QueueDefinition,
   naming?: TopologyNaming,
-  prefix?: string | null,
+  prefix?: ResourcePrefix,
 ): string {
   if (queueDef.exact) {
     return queueDef.name;
