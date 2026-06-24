@@ -107,7 +107,8 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
     // doConnect() registered a 'close' listener that calls
     // connectionManager.handleConnectionLost(), which triggers reconnection.
     const triggerClose = closeHandlers[0];
-    if (!triggerClose) throw new Error('no close handler captured from mock connection');
+    if (!triggerClose)
+      throw new Error('no close handler captured from mock connection');
     triggerClose();
 
     // Give the ConnectionManager time to reconnect (initialReconnectDelay = 10 ms).
@@ -125,7 +126,8 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
 
     // Trigger reconnect
     const triggerClose = closeHandlers[0];
-    if (!triggerClose) throw new Error('no close handler captured from mock connection');
+    if (!triggerClose)
+      throw new Error('no close handler captured from mock connection');
     triggerClose();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
