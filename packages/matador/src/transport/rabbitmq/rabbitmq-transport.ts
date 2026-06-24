@@ -84,6 +84,20 @@ interface ActiveConsumer {
 }
 
 /**
+ * Durable record of a subscribe() call.
+ * Stored so consumers can be recreated verbatim after a reconnect.
+ */
+interface SubscriptionIntent {
+  readonly queue: string;
+  readonly handler: MessageHandler;
+  readonly options: SubscribeOptions;
+  /** False once the caller has unsubscribed — prevents replay on reconnect. */
+  active: boolean;
+  /** The live consumer for this intent; replaced on each reconnect. */
+  currentConsumer: ActiveConsumer | null;
+}
+
+/**
  * Redacts credentials from an AMQP URL.
  * Replaces username and password with '****' regardless of their length.
  *
@@ -119,6 +133,7 @@ export class RabbitMQTransport implements Transport {
   private publishChannel: ConfirmChannel | null = null;
   private readonly connectionManager: ConnectionManager;
   private readonly queueChannels = new Map<string, QueueChannel>();
+  private readonly subscriptionIntents: SubscriptionIntent[] = [];
   private topology: Topology | null = null;
   private readonly codec = new RabbitMQCodec();
 
@@ -284,7 +299,60 @@ export class RabbitMQTransport implements Transport {
       throw new TransportNotConnectedError(this.name, 'subscribe');
     }
 
-    // Get or create a dedicated channel for this queue
+    const intent: SubscriptionIntent = {
+      queue,
+      handler,
+      options,
+      active: true,
+      currentConsumer: null,
+    };
+
+    this.subscriptionIntents.push(intent);
+    await this.activateIntent(intent);
+
+    return {
+      unsubscribe: async () => {
+        intent.active = false;
+
+        const idx = this.subscriptionIntents.indexOf(intent);
+        if (idx !== -1) this.subscriptionIntents.splice(idx, 1);
+
+        const consumer = intent.currentConsumer;
+        if (consumer) {
+          consumer.active = false;
+          const queueChannel = this.queueChannels.get(queue);
+          if (queueChannel) {
+            try {
+              await queueChannel.channel.cancel(consumer.consumerTag);
+            } catch {
+              // Channel may already be closed
+            }
+            const cIdx = queueChannel.consumers.indexOf(consumer);
+            if (cIdx !== -1) queueChannel.consumers.splice(cIdx, 1);
+            if (queueChannel.consumers.length === 0) {
+              try {
+                await queueChannel.channel.close();
+              } catch {
+                // Ignore
+              }
+              this.queueChannels.delete(queue);
+            }
+          }
+          intent.currentConsumer = null;
+        }
+      },
+      get isActive() {
+        return intent.active;
+      },
+    };
+  }
+
+  /**
+   * Wires a single subscription intent to the current connection.
+   * Called once on subscribe() and again after each reconnect.
+   */
+  private async activateIntent(intent: SubscriptionIntent): Promise<void> {
+    const { queue, handler, options } = intent;
     const queueChannel = await this.getOrCreateQueueChannel(queue, options);
     const { channel } = queueChannel;
 
@@ -320,51 +388,18 @@ export class RabbitMQTransport implements Transport {
           );
           await handler(envelope, receipt);
         } catch (error) {
-          // Handler errors should be caught in the pipeline
           this.logger.error(
             '[Matador] 🔴 Handler error in message processing',
             error,
           );
         }
       },
-      { noAck: false }, // Always manually ack
+      { noAck: false },
     );
 
-    // Update the consumer tag
     (consumer as { consumerTag: string }).consumerTag = consumerTag;
-
-    // Track the consumer
     queueChannel.consumers.push(consumer);
-
-    return {
-      unsubscribe: async () => {
-        consumer.active = false;
-        try {
-          await channel.cancel(consumerTag);
-        } catch {
-          // Channel may already be closed
-        }
-
-        // Remove consumer from tracking
-        const idx = queueChannel.consumers.indexOf(consumer);
-        if (idx !== -1) {
-          queueChannel.consumers.splice(idx, 1);
-        }
-
-        // Close channel if no more consumers on this queue
-        if (queueChannel.consumers.length === 0) {
-          try {
-            await channel.close();
-          } catch {
-            // Ignore
-          }
-          this.queueChannels.delete(queue);
-        }
-      },
-      get isActive() {
-        return consumer.active;
-      },
-    };
+    intent.currentConsumer = consumer;
   }
 
   async complete(receipt: MessageReceipt): Promise<void> {
@@ -519,6 +554,9 @@ export class RabbitMQTransport implements Transport {
   }
 
   private async doConnect(): Promise<void> {
+    // Drop stale channel objects so getOrCreateQueueChannel opens fresh ones
+    this.queueChannels.clear();
+
     this.logger.info(
       `[Matador] ⏳ Connecting to RabbitMQ at '${redactAmqpUrl(this.config.url)}'.`,
     );
@@ -533,6 +571,14 @@ export class RabbitMQTransport implements Transport {
     });
 
     connection.on('close', () => {
+      // Immediately deactivate all live consumers so any buffered messages
+      // delivered on the dying connection are dropped rather than partially
+      // processed (handler fires but ack silently fails on the dead channel).
+      for (const queueChannel of this.queueChannels.values()) {
+        for (const consumer of queueChannel.consumers) {
+          consumer.active = false;
+        }
+      }
       if (this.connectionManager.isConnected()) {
         // Unexpected close, trigger reconnection
         this.connectionManager.handleConnectionLost(
@@ -553,6 +599,10 @@ export class RabbitMQTransport implements Transport {
     // Re-apply topology if we have one (reconnection scenario)
     if (this.topology) {
       await this.applyTopology(this.topology);
+      // Recreate consumers for every active subscription on the new connection.
+      for (const intent of this.subscriptionIntents) {
+        await this.activateIntent(intent);
+      }
     }
   }
 

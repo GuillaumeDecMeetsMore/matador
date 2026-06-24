@@ -113,9 +113,7 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
     // Give the ConnectionManager time to reconnect (initialReconnectDelay = 10 ms).
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // After reconnect, doConnect() runs again and re-applies topology —
-    // but currently it does NOT re-register consumers.
-    // This assertion FAILS until the bug is fixed.
+    // After reconnect, doConnect() runs again and re-applies topology and recreates consumers.
     expect(consumeCallCount).toBe(2);
   });
 
@@ -133,14 +131,6 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
 
     // After reconnect the consumer should be active. Simulate message delivery
     // by invoking the consume callback captured in the mock.
-    // Because consumers are NOT recreated (the bug), the handler is never
-    // wired to the new connection's channel, so `received` stays empty.
-    //
-    // To verify this we need access to the consume handler registered on the
-    // NEW channel. Since the bug means no new consume() call happens, we
-    // instead assert the consumer count — which is equivalent.
-    //
-    // This test FAILS until the bug is fixed.
     expect(consumeCallCount).toBe(2);
   });
 });
