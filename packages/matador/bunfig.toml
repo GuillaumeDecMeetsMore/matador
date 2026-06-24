@@ -1,0 +1,4 @@
+# https://bun.com/docs/runtime/bunfig
+
+[test]
+pathIgnorePatterns = ["**/node_modules/**", "**/dist/**"]
