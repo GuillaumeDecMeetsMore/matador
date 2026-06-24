@@ -64,7 +64,7 @@ export class TopologyBuilder {
     maxDelayMs: 300000, // 5 minutes
   };
   private naming: TopologyNaming | undefined;
-  private prefix: string | null = 'matador';
+  private prefix: Topology['prefix'] = 'matador';
 
   /**
    * Sets the namespace prefix for all queues.
