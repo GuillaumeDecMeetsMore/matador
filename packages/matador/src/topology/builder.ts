@@ -243,8 +243,8 @@ function validateNamespace(namespace: string): string[] {
 }
 
 function validatePrefix(prefix: Topology['prefix']): string[] {
-  // null explicitly disables prefixing.
-  if (prefix === null) {
+  // null/undefined explicitly disable prefixing.
+  if (prefix == null) {
     return [];
   }
   if (prefix.trim() === '') {
