@@ -563,7 +563,6 @@ export class RabbitMQTransport implements Transport {
     });
     this.connection = connection;
 
-
     // Handle connection errors - let ConnectionManager handle reconnection
     connection.on('error', (err: Error) => {
       this.logger.error('[Matador] 🔴 RabbitMQ connection error', err);
