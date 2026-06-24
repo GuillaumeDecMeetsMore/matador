@@ -242,7 +242,7 @@ function validateNamespace(namespace: string): string[] {
   return [];
 }
 
-function validatePrefix(prefix: string | null): string[] {
+function validatePrefix(prefix: Topology['prefix']): string[] {
   // null explicitly disables prefixing.
   if (prefix === null) {
     return [];
