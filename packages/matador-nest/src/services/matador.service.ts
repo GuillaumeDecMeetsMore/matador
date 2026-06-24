@@ -18,7 +18,8 @@ import {
   isSchemaEntryTuple,
 } from '@zdavison/matador';
 import { MATADOR_OPTIONS } from '../constants.js';
-import type { SubscriberDiscoveryService } from '../discovery/subscriber-discovery.service.js';
+// biome-ignore lint/style/useImportType: must be a runtime value import — Nest reads it from emitDecoratorMetadata to inject this constructor dependency; `import type` erases it and breaks DI.
+import { SubscriberDiscoveryService } from '../discovery/subscriber-discovery.service.js';
 import type { MatadorModuleOptions } from '../types.js';
 
 /**
