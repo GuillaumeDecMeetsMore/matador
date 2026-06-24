@@ -80,7 +80,7 @@ function mockConnect() {
     },
     close: async () => {
       if (connectionCloseCounts[index] !== undefined) {
-        connectionCloseCounts[index]++
+        connectionCloseCounts[index]++;
       }
     },
   };
@@ -156,7 +156,8 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
     await transport.subscribe('test.events', async () => {});
 
     const triggerClose = closeHandlers[0];
-    if (!triggerClose) throw new Error('no close handler captured from mock connection');
+    if (!triggerClose)
+      throw new Error('no close handler captured from mock connection');
     triggerClose();
 
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -174,7 +175,8 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
     failConfirmChannelOnConnection = 1;
 
     const triggerClose = closeHandlers[0];
-    if (!triggerClose) throw new Error('no close handler captured from mock connection');
+    if (!triggerClose)
+      throw new Error('no close handler captured from mock connection');
     triggerClose();
 
     // Wait for the failed attempt (~10 ms) + successful retry (~10 ms) + margin.
