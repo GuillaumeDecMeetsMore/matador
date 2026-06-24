@@ -295,6 +295,10 @@ export class RabbitMQTransport implements Transport {
     handler: MessageHandler,
     options: SubscribeOptions = {},
   ): Promise<Subscription> {
+    if (!this.connection || !this.topology) {
+      throw new TransportNotConnectedError(this.name, 'subscribe');
+    }
+
     const intent: SubscriptionIntent = {
       queue,
       handler,
@@ -304,9 +308,7 @@ export class RabbitMQTransport implements Transport {
     };
 
     this.subscriptionIntents.push(intent);
-    if (this.connection && this.topology) {
-      await this.activateIntent(intent);
-    }
+    await this.activateIntent(intent);
 
     return {
       unsubscribe: async () => {
