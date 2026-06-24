@@ -84,16 +84,16 @@ interface ActiveConsumer {
 }
 
 /**
- * Durable record of a subscribe() call.
- * Stored so consumers can be recreated verbatim after a reconnect.
+ * Record of a subscribe() call
+ * Stored so consumers can be recreated after a reconnect
  */
 interface SubscriptionIntent {
   readonly queue: string;
   readonly handler: MessageHandler;
   readonly options: SubscribeOptions;
-  /** False once the caller has unsubscribed — prevents replay on reconnect. */
+  /** False once the caller has unsubscribed - prevents replay on reconnect */
   active: boolean;
-  /** The live consumer for this intent; replaced on each reconnect. */
+  /** The live consumer for this intent; replaced on each reconnect */
   currentConsumer: ActiveConsumer | null;
 }
 
@@ -295,10 +295,6 @@ export class RabbitMQTransport implements Transport {
     handler: MessageHandler,
     options: SubscribeOptions = {},
   ): Promise<Subscription> {
-    if (!this.connection || !this.topology) {
-      throw new TransportNotConnectedError(this.name, 'subscribe');
-    }
-
     const intent: SubscriptionIntent = {
       queue,
       handler,
@@ -308,7 +304,9 @@ export class RabbitMQTransport implements Transport {
     };
 
     this.subscriptionIntents.push(intent);
-    await this.activateIntent(intent);
+    if (this.connection && this.topology) {
+      await this.activateIntent(intent);
+    }
 
     return {
       unsubscribe: async () => {
@@ -564,6 +562,7 @@ export class RabbitMQTransport implements Transport {
       clientProperties: { connection_name: this.config.connectionName },
     });
     this.connection = connection;
+
 
     // Handle connection errors - let ConnectionManager handle reconnection
     connection.on('error', (err: Error) => {
