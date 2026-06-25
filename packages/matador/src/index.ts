@@ -99,6 +99,7 @@ export type {
   QueueOptions,
   RabbitMQQueueDefinition,
   RabbitMQQueueOptions,
+  ResourcePrefix,
   RetryConfig,
   Topology,
   TopologyNaming,

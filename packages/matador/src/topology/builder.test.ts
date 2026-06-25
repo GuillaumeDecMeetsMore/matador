@@ -642,6 +642,17 @@ describe('resource name prefix', () => {
       expect(topology.prefix).toBeNull();
       expect(resolveTargetQueueName(topology, 'events')).toBe('myapp.events');
     });
+
+    it('disables prefixing when set to undefined', () => {
+      const topology = TopologyBuilder.create()
+        .withNamespace('myapp')
+        .withGlobalPrefix(undefined)
+        .addQueue('events')
+        .build();
+
+      expect(topology.prefix).toBeUndefined();
+      expect(resolveTargetQueueName(topology, 'events')).toBe('myapp.events');
+    });
   });
 
   describe('helper-level prefixing', () => {
