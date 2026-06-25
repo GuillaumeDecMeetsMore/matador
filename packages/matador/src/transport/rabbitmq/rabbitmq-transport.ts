@@ -559,17 +559,12 @@ export class RabbitMQTransport implements Transport {
   }
 
   private async doConnect(): Promise<void> {
-    // Close any existing connection before opening a new one. Two cases:
-    //   1. Normal reconnect: the old connection is already dead (broker closed it),
-    //      so close() will likely throw — that is expected and swallowed.
-    //   2. A prior doConnect() threw after amqplib.connect() resolved: the
-    //      connection may still be alive and must be closed to avoid leaking
-    //      broker resources (file descriptors, TCP sockets, server-side slots).
+    // Close any existing connection before opening a new one
     if (this.connection) {
       try {
         await this.connection.close();
       } catch {
-        // Expected when the connection is already dead
+        // Can happen if the connection is already closed
       }
       this.connection = null;
       this.publishChannel = null; // channels belong to the old connection
@@ -577,7 +572,6 @@ export class RabbitMQTransport implements Transport {
 
     // Drop stale channel objects so getOrCreateQueueChannel opens fresh ones
     // on the new connection during intent replay below.
-    // Consumers were already marked inactive in the 'close' event handler.
     this.queueChannels.clear();
 
     this.logger.info(
@@ -611,8 +605,7 @@ export class RabbitMQTransport implements Transport {
     });
 
     try {
-      // Create the publish channel.
-      // A confirm channel so publishes can await broker acknowledgement.
+      // A confirm channel so publishes can await broker acknowledgement
       this.publishChannel = await connection.createConfirmChannel();
 
       // Handle publish channel errors to prevent unhandled error events
@@ -629,8 +622,7 @@ export class RabbitMQTransport implements Transport {
         }
       }
     } catch (err) {
-      // Setup failed after the connection was opened. Close it now so the
-      // ConnectionManager's retry doesn't leak the partially-set-up connection.
+      // Setup failed after the connection was opened - close it so that it doesn't leak
       try {
         await connection.close();
       } catch {
