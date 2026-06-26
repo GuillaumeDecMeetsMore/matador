@@ -599,7 +599,6 @@ export class RabbitMQTransport implements Transport {
       this.connection = null;
       this.publishChannel = null;
 
-
       if (this.connectionManager.isConnected()) {
         // Unexpected close, trigger reconnection
         this.connectionManager.handleConnectionLost(
