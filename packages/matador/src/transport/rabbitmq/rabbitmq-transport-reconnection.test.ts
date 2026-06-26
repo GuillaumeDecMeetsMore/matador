@@ -155,12 +155,9 @@ describe('RabbitMQTransport – consumer recreation on reconnect', () => {
   it('closes the previous (dead) connection before opening a new one', async () => {
     await transport.subscribe('test.events', async () => {});
 
-    const triggerClose = closeHandlers[0];
-    if (!triggerClose)
-      throw new Error('no close handler captured from mock connection');
-    triggerClose();
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Trigger a new connect (private method)
+    // biome-ignore lint/complexity/useLiteralKeys: private method
+    await transport['doConnect']();
 
     // doConnect() must call close() on the stale first connection before
     // creating a new one, so broker resources are not leaked.

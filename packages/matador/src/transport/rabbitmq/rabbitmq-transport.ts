@@ -602,6 +602,8 @@ export class RabbitMQTransport implements Transport {
           new Error('Connection closed unexpectedly'),
         );
       }
+      this.connection = null;
+      this.publishChannel = null;
     });
 
     try {
