@@ -596,14 +596,16 @@ export class RabbitMQTransport implements Transport {
           consumer.active = false;
         }
       }
+      this.connection = null;
+      this.publishChannel = null;
+
+
       if (this.connectionManager.isConnected()) {
         // Unexpected close, trigger reconnection
         this.connectionManager.handleConnectionLost(
           new Error('Connection closed unexpectedly'),
         );
       }
-      this.connection = null;
-      this.publishChannel = null;
     });
 
     try {
