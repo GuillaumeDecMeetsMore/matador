@@ -157,13 +157,16 @@ export class MultiTransport implements Transport {
 
   onConnected(callback: () => void): () => void {
     const unsubs = this.transports
-      .filter((t): t is Transport & Required<Pick<Transport, 'onConnected'>> => t.onConnected !== undefined)
+      .filter(
+        (t): t is Transport & Required<Pick<Transport, 'onConnected'>> =>
+          t.onConnected !== undefined,
+      )
       .map((t) => t.onConnected(callback));
     return () => {
       for (const u of unsubs) {
         u();
       }
-    }
+    };
   }
 
   async applyTopology(topology: Topology): Promise<void> {

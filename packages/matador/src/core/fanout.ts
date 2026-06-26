@@ -182,8 +182,16 @@ export class FanoutEngine {
 
           if (options.reportBufferedFailure) {
             const err = new TransportSendError(qualifiedQueue, cause);
-            errors.push({ subscriberName: subscriber.name, queue: qualifiedQueue, error: err });
-            await this.hooks.onEnqueueError({ envelope, error: err, transport: this.transport.name });
+            errors.push({
+              subscriberName: subscriber.name,
+              queue: qualifiedQueue,
+              error: err,
+            });
+            await this.hooks.onEnqueueError({
+              envelope,
+              error: err,
+              transport: this.transport.name,
+            });
           }
         } else {
           if (shouldBuffer) {
