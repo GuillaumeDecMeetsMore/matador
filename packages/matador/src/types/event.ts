@@ -63,6 +63,25 @@ export interface EventOptions {
    * and both taking precedence over universal metadata.
    */
   readonly metadata?: JsonRecord | undefined;
+
+  /**
+   * Whether to buffer this send for retry on reconnect if all transports fail.
+   * When true (default), failed sends are held in memory and retried automatically
+   * when the transport reconnects.
+   * When false, failures are reported immediately in result.errors with no retry.
+   *
+   * @default true
+   */
+  readonly buffer?: boolean | undefined;
+
+  /**
+   * Whether to also report a buffered failure in result.errors.
+   * Only meaningful when buffer is true. When true, the send is both buffered
+   * for retry AND reported as an error so the caller is aware it failed.
+   *
+   * @default false
+   */
+  readonly reportBufferedFailure?: boolean | undefined;
 }
 
 /**

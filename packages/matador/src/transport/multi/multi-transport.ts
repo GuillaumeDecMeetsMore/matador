@@ -155,6 +155,17 @@ export class MultiTransport implements Transport {
     return this.connected && this.primary.isConnected();
   }
 
+  onConnected(callback: () => void): () => void {
+    const unsubs = this.transports
+      .filter((t): t is Transport & Required<Pick<Transport, 'onConnected'>> => t.onConnected !== undefined)
+      .map((t) => t.onConnected(callback));
+    return () => {
+      for (const u of unsubs) {
+        u();
+      }
+    }
+  }
+
   async applyTopology(topology: Topology): Promise<void> {
     // Apply topology to all transports so they're all ready
     await Promise.all(this.transports.map((t) => t.applyTopology(topology)));

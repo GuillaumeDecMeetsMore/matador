@@ -182,6 +182,14 @@ export class RabbitMQTransport implements Transport {
     return this.connectionManager.isConnected();
   }
 
+  onConnected(callback: () => void): () => void {
+    return this.connectionManager.onStateChange((state) => {
+      if (state.status === 'connected') {
+        callback();
+      }
+    });
+  }
+
   async applyTopology(topology: Topology): Promise<void> {
     this.topology = topology;
 
