@@ -1105,7 +1105,7 @@ describe('FanoutEngine', () => {
       });
 
       await fanoutWithHooks.send(UserCreatedEvent, event, {
-        reportBufferedFailure: true,
+        throwOnBufferedFailure: true,
       });
 
       expect(onEnqueueError).toHaveBeenCalledTimes(1);
@@ -1660,7 +1660,7 @@ describe('FanoutEngine', () => {
         email: 'test@example.com',
       });
       const result = await fanoutWithReconnect.send(UserCreatedEvent, event, {
-        reportBufferedFailure: true,
+        throwOnBufferedFailure: true,
       });
 
       // Error is reported immediately

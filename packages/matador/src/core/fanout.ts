@@ -82,12 +82,15 @@ export class FanoutEngine {
     this.defaultQueue = config.defaultQueue;
     this.maxRetryBufferSize = config.maxRetryBufferSize ?? 5000;
 
+    // If the transport supports it, add a callback to flush the retry buffer when the transport reconnects
+    // The returned value is a function to unsubscribe from the callback
     this.disposeOnConnected = this.transport.onConnected?.(() => {
       void this.flushRetryBuffer();
     });
   }
 
   dispose(): void {
+    // Unsubscribe from the callback (that flushes the retry buffer when the transport reconnects)
     this.disposeOnConnected?.();
   }
 
@@ -180,8 +183,9 @@ export class FanoutEngine {
             `[Matador] 🟡 Message for '${subscriber.name}' buffered for retry on reconnect (buffer: ${this.retryBuffer.length}/${this.maxRetryBufferSize}).`,
           );
 
-          if (options.reportBufferedFailure) {
+          if (options.throwOnBufferedFailure) {
             const err = new TransportSendError(qualifiedQueue, cause);
+            // By adding the error, the main Send in Matador will throw
             errors.push({
               subscriberName: subscriber.name,
               queue: qualifiedQueue,
@@ -225,6 +229,11 @@ export class FanoutEngine {
     };
   }
 
+  /**
+   * Flushes the retry buffer
+   * 
+   * This is called when the transport reconnects, and is used to retry any messages that were buffered while the transport was disconnected
+   */
   private async flushRetryBuffer(): Promise<void> {
     if (this.retryBuffer.length === 0) return;
 

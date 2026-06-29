@@ -155,16 +155,19 @@ export class MultiTransport implements Transport {
     return this.connected && this.primary.isConnected();
   }
 
+  /**
+   * Registers a callback to fire each time the transport successfully (re)connects
+   * @param callback - The callback to fire when the transport successfully (re)connects
+   * @returns A function to unsubscribe from the callback
+   */
   onConnected(callback: () => void): () => void {
-    const unsubs = this.transports
-      .filter(
-        (t): t is Transport & Required<Pick<Transport, 'onConnected'>> =>
-          t.onConnected !== undefined,
-      )
-      .map((t) => t.onConnected(callback));
+    // This adds the callback on all transports that support it, and returns functions to unsubscribe from all transports
+    const unsubFunctions = this.transports.map((t) => t.onConnected?.(callback)).filter(Boolean) as (() => void)[];
+
+    // Return a function to unsubscribe from all transports
     return () => {
-      for (const u of unsubs) {
-        u();
+      for (const unsub of unsubFunctions) {
+        unsub();
       }
     };
   }

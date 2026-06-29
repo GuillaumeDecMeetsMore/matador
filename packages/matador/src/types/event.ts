@@ -75,13 +75,13 @@ export interface EventOptions {
   readonly buffer?: boolean | undefined;
 
   /**
-   * Whether to also report a buffered failure in result.errors.
-   * Only meaningful when buffer is true. When true, the send is both buffered
+   * Whether to throw an error when a buffered failure is reported.
+   * Only meaningful when buffer is true. When true, the send is buffered
    * for retry AND reported as an error so the caller is aware it failed.
    *
    * @default false
    */
-  readonly reportBufferedFailure?: boolean | undefined;
+  readonly throwOnBufferedFailure?: boolean | undefined;
 }
 
 /**
