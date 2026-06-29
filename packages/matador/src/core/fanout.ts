@@ -231,7 +231,7 @@ export class FanoutEngine {
 
   /**
    * Flushes the retry buffer
-   * 
+   *
    * This is called when the transport reconnects, and is used to retry any messages that were buffered while the transport was disconnected
    */
   private async flushRetryBuffer(): Promise<void> {

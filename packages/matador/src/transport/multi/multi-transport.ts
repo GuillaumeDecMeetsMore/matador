@@ -162,7 +162,9 @@ export class MultiTransport implements Transport {
    */
   onConnected(callback: () => void): () => void {
     // This adds the callback on all transports that support it, and returns functions to unsubscribe from all transports
-    const unsubFunctions = this.transports.map((t) => t.onConnected?.(callback)).filter(Boolean) as (() => void)[];
+    const unsubFunctions = this.transports
+      .map((t) => t.onConnected?.(callback))
+      .filter(Boolean) as (() => void)[];
 
     // Return a function to unsubscribe from all transports
     return () => {
