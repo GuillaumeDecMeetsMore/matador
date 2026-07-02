@@ -4,6 +4,7 @@ import { SafeHooks } from '../hooks/index.js';
 import type { MatadorHooks } from '../hooks/index.js';
 import { SchemaRegistry } from '../schema/index.js';
 import { TopologyBuilder } from '../topology/index.js';
+import { MultiTransport } from '../transport/index.js';
 import type { Transport } from '../transport/index.js';
 import {
   MatadorEvent,
@@ -1587,6 +1588,7 @@ describe('FanoutEngine', () => {
       expect(successTransport.send).toHaveBeenCalledTimes(1);
     });
 
+
     it('should report error in result when buffer is false', async () => {
       const subscriber = createSubscriber({
         name: 'handle-user',
@@ -1779,6 +1781,53 @@ describe('FanoutEngine', () => {
       const second = await fanoutWithSmallBuffer.send(UserCreatedEvent, event);
       expect(second.errors).toHaveLength(1);
       expect(onEnqueueError).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not buffer when a fallback transport succeeds after the primary fails', async () => {
+      const rabbitMock: Transport = {
+        ...transport,
+        name: 'rabbitmq',
+        send: mock(async () => {
+          throw new Error('RabbitMQ down');
+        }),
+      };
+      const localMock: Transport = {
+        ...transport,
+        name: 'local',
+        send: mock(async () => 'local'),
+      };
+
+      const multiTransport = new MultiTransport({
+        transports: [rabbitMock, localMock],
+      });
+
+      const fanoutWithMulti = new FanoutEngine({
+        transport: multiTransport,
+        schema,
+        hooks,
+        topology: testTopology,
+        defaultQueue: 'events',
+      });
+
+      const subscriber = createSubscriber({
+        name: 'handle-user',
+        description: 'Handles user events',
+        callback: async () => {},
+      });
+      schema.register(UserCreatedEvent, [subscriber]);
+
+      const event = new UserCreatedEvent({
+        userId: '123',
+        email: 'test@example.com',
+      });
+
+      const result = await fanoutWithMulti.send(UserCreatedEvent, event);
+
+      expect(result.subscribersSent).toBe(1);
+      expect(result.errors).toHaveLength(0);
+      expect(rabbitMock.send).toHaveBeenCalledTimes(1);
+      expect(localMock.send).toHaveBeenCalledTimes(1);
+      expect(fanoutWithMulti.eventsBeingEnqueuedCount).toBe(0);
     });
   });
 });
