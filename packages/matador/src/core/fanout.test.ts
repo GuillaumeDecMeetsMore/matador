@@ -1588,7 +1588,6 @@ describe('FanoutEngine', () => {
       expect(successTransport.send).toHaveBeenCalledTimes(1);
     });
 
-
     it('should report error in result when buffer is false', async () => {
       const subscriber = createSubscriber({
         name: 'handle-user',
